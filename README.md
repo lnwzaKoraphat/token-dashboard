@@ -16,6 +16,16 @@ python server.py --base "D:\path\to\profiles"   # ระบุโฟลเดอ
 - ค่าเริ่มต้นอ่านที่ `%LOCALAPPDATA%\hermes\profiles\<ชื่อ>\state.db`
 - หน้าเว็บรีเฟรชเองทุก 30 วินาที ถ้าโหลดไม่สำเร็จจะขึ้นแถบแดงและคงข้อมูลล่าสุดไว้
 
+## การดูข้อมูลผ่านอินเทอร์เน็ต / Cloudflare
+
+1. **ส่งข้อมูลขึ้น Cloudflare Pages ด้วยคลิกเดียว (Static):**
+   - ดับเบิลคลิกที่ไฟล์ `Push-To-Web.exe` (หรือชอร์ตคัตบนหน้า Desktop)
+   - โปรแกรมจะอ่านข้อมูล Token ล่าสุดจาก Hermes ในเครื่อง Export เป็น JSON และ Git Push ขึ้น GitHub / Cloudflare Pages ให้อัตโนมัติ
+
+2. **เปิดดูแบบ Real-time ตลอดเวลาผ่าน Cloudflare Tunnel:**
+   - ดับเบิลคลิกที่ไฟล์ `start-cloudflare.bat`
+   - ระบบจะเปิดเซิร์ฟเวอร์และสร้าง Public URL จาก Cloudflare (`trycloudflare.com`) ให้เปิดดูผ่านมือถือหรืออุปกรณ์อื่นได้ทันทีแบบ Real-time
+
 ## ตัวเลขแต่ละอย่างหมายถึงอะไร
 
 | ตัวเลข | ความหมาย |
