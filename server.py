@@ -13,6 +13,8 @@ BOTS = ("astra", "sol", "flash", "luna")
 TZ = timezone(timedelta(hours=7))  # Asia/Bangkok, no DST
 TZ_OFFSET = 7 * 3600
 STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
+# Context windows used for the session-limit bar (estimates; first matching rule wins).
+CONTEXT_LIMITS = {"1m_marker": ("[1m]", 1_000_000), "gpt6_prefix": ("openai/gpt-6", 400_000), "default": 200_000}
 FIELDS = ("input", "output", "cache_read", "cache_write", "reasoning", "calls", "cost")
 
 
@@ -27,6 +29,31 @@ def family_of(model):
     if "gpt" in m or "openai/" in m:
         return "gpt"
     return "other"
+
+
+def context_limit(model):
+    m = (model or "").lower()
+    if CONTEXT_LIMITS["1m_marker"][0] in m:
+        return CONTEXT_LIMITS["1m_marker"][1]
+    if m.startswith(CONTEXT_LIMITS["gpt6_prefix"][0]):
+        return CONTEXT_LIMITS["gpt6_prefix"][1]
+    return CONTEXT_LIMITS["default"]
+
+
+def session_limit(con, fallback_model):
+    """Fill level of the latest session's context (estimate: sum(len(content)//4) of active messages). None if no sessions."""
+    row = con.execute("select id from sessions order by started_at desc limit 1").fetchone()
+    if not row:
+        return None
+    sid = row[0]
+    cols = {r[1] for r in con.execute("pragma table_info(messages)")}
+    where = "session_id = ?"
+    if "active" in cols:
+        where += " and (active = 1 or (active is null and %s))" % ("coalesce(compacted, 0) = 0" if "compacted" in cols else "1")
+    used = con.execute("select coalesce(sum(length(coalesce(content, '')) / 4), 0) from messages where " + where, (sid,)).fetchone()[0] or 0
+    m = con.execute("select model from session_model_usage where session_id = ? order by last_seen desc limit 1", (sid,)).fetchone()
+    limit = context_limit((m[0] if m and m[0] else None) or fallback_model)
+    return {"session_id_short": (sid or "")[:8], "used_est": int(used), "limit": limit, "pct": round(used / limit * 100, 1), "basis": "estimate"}
 
 
 def zero():
@@ -93,7 +120,8 @@ def read_profile(name, base, bucket, days, now, nbuckets_ctx):
                 " where timestamp >= ? group by b", (TZ_OFFSET, unit, cutoff)):
             if key in index:
                 counts[index[key]] += int(tok or 0)
-        return rows, counts
+        main = max(set(r[1] for r in rows if r[1]), key=lambda k: sum((r[3] or 0) + (r[4] or 0) for r in rows if r[1] == k), default="")
+        return rows, counts, session_limit(con, main)
     finally:
         con.close()
 
@@ -111,7 +139,7 @@ def build_usage(base, bucket="day", days=7, now=None):
     sessions = []
     for name in BOTS:
         try:
-            rows, counts = read_profile(name, base, bucket, days, now, ctx)
+            rows, counts, slimit = read_profile(name, base, bucket, days, now, ctx)
         except Exception as e:  # unavailable profile must never crash the response
             out["profiles"].append({"name": name, "family": "other", "model": "", "available": False, "error": str(e)[:200]})
             out["series"]["bots"][name] = [0] * len(ctx[0])
@@ -134,7 +162,7 @@ def build_usage(base, bucket="day", days=7, now=None):
         main = max(per_model, key=lambda k: per_model[k]["input"] + per_model[k]["output"], default="")
         out["profiles"].append({"name": name, "family": family_of(main), "model": main if main != "-" else "", "available": True})
         for model, vals in per_model.items():
-            out["by_bot"].append(dict({"bot": name, "model": model, "family": family_of(model)}, **vals))
+            out["by_bot"].append(dict({"bot": name, "model": model, "family": family_of(model), "session_limit": slimit}, **vals))
         out["series"]["bots"][name] = counts
     sessions.sort(key=lambda s: s["total_tokens"], reverse=True)
     out["top_sessions"] = sessions[:20]

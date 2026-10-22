@@ -3,109 +3,148 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Token Dashboard</title>
+<meta name="color-scheme" content="dark">
+<title>Token Dashboard · ห้องควบคุมบอท</title>
 <style>
 :root {
-  --bg:#f7f7f5; --card:#fff; --ink:#18181b; --muted:#71717a; --line:#ececea; --track:#f1f1ef;
-  --claude:#d97706; --gpt:#2563eb; --other:#a1a1aa;
-  --t-in:#18181b; --t-out:#4f46e5; --t-cr:#8b9cf9; --t-cw:#c7d2fe;
-  --danger:#b3261e; --danger-bg:#fdf1f0; --radius:14px; --shadow:0 1px 2px rgba(24,24,27,.04);
-}
-@media (prefers-color-scheme: dark) {
-  :root { --bg:#0f0f11; --card:#17171a; --ink:#ededed; --muted:#9a9aa3; --line:#26262b; --track:#202024;
-    --t-in:#ededed; --t-out:#818cf8; --t-cr:#4f46e5; --t-cw:#312e81; --danger:#f2b8b5; --danger-bg:#2a1414; --shadow:none; }
+  --bg:#050a18; --panel:#0b1330; --panel2:#0f1a3d; --line:#1f2f5c; --ink:#eaf0ff; --muted:#a3b3da;
+  --cyan:#22d3ee; --violet:#a78bfa; --ok:#34d399; --warn:#fbbf24; --bad:#fb7185;
+  --r:12px; --s1:4px; --s2:8px; --s3:12px; --s4:16px; --s5:24px;
 }
 * { box-sizing:border-box; }
-body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.55 "Sarabun","Noto Sans Thai","Leelawadee UI",system-ui,sans-serif; -webkit-font-smoothing:antialiased; }
-main { max-width:1100px; margin:0 auto; padding:28px 16px 48px; }
-h1 { font-size:1.4rem; font-weight:600; letter-spacing:-.01em; margin:0; }
-h2 { font-size:.8rem; font-weight:600; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); margin:36px 0 12px; }
-.muted { color:var(--muted); font-size:.86rem; }
-.banner { background:var(--danger-bg); border:1px solid var(--danger); color:var(--danger); border-radius:var(--radius); padding:10px 14px; margin:12px 0; }
+html { color-scheme:dark; }
+body { margin:0; color:var(--ink); background:
+  radial-gradient(900px 420px at 85% -10%, rgba(167,139,250,.16), transparent 70%),
+  radial-gradient(800px 400px at 5% -5%, rgba(34,211,238,.13), transparent 70%), var(--bg);
+  font:15px/1.55 "Segoe UI","Leelawadee UI","Sarabun","Noto Sans Thai",system-ui,sans-serif; font-variant-numeric:tabular-nums; }
+main { max-width:1180px; margin:0 auto; padding:var(--s4); }
+h1 { font-size:1.3rem; margin:0; letter-spacing:.01em; }
+h2 { font-size:1.05rem; margin:var(--s5) 0 var(--s2); color:var(--ink); }
+.muted { color:var(--muted); font-size:.88rem; }
+.top { display:flex; align-items:center; justify-content:space-between; gap:var(--s3); flex-wrap:wrap; }
+.live { display:inline-flex; align-items:center; gap:8px; color:var(--muted); font-size:.88rem; }
+.live::before { content:""; width:8px; height:8px; border-radius:50%; background:var(--ok); box-shadow:0 0 8px var(--ok); }
+.banner { background:#3a0f1c; border:1px solid var(--bad); color:#ffd9e0; border-radius:var(--r); padding:var(--s3) var(--s4); margin:var(--s3) 0; }
 .banner[hidden] { display:none; }
-.cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:12px; margin-top:20px; }
-.card, .tablewrap, .chart, .models { background:var(--card); border:1px solid var(--line); border-radius:var(--radius); box-shadow:var(--shadow); }
-.card { padding:16px 18px; position:relative; }
-.card::before { content:""; position:absolute; left:18px; top:20px; width:8px; height:8px; border-radius:50%; background:var(--ink); }
-.card.claude::before { background:var(--claude); } .card.gpt::before { background:var(--gpt); }
-.card > .muted:first-child { padding-left:16px; }
-.card .big { font-size:2rem; font-weight:600; letter-spacing:-.02em; margin:6px 0 2px; font-variant-numeric:tabular-nums; }
-.card > div:nth-last-child(-n+2) { font-size:.86rem; font-variant-numeric:tabular-nums; }
-.tablewrap { overflow-x:auto; }
-table { border-collapse:collapse; width:100%; font-variant-numeric:tabular-nums; font-size:.9rem; }
-th, td { padding:10px 14px; border-bottom:1px solid var(--line); text-align:right; white-space:nowrap; }
-th { font-weight:500; color:var(--muted); font-size:.8rem; }
+.panel { background:linear-gradient(180deg, var(--panel2), var(--panel)); border:1px solid var(--line); border-radius:var(--r); padding:var(--s4); }
+
+/* KPI tiles */
+.kpis { display:grid; grid-template-columns:repeat(3, 1fr); gap:var(--s3); margin-top:var(--s4); }
+.card { position:relative; background:linear-gradient(180deg, var(--panel2), var(--panel)); border:1px solid var(--line); border-radius:var(--r); padding:var(--s4) var(--s4) var(--s3); overflow:hidden; }
+.card::before { content:""; position:absolute; left:0; right:0; top:0; height:3px; background:var(--accent); box-shadow:0 0 18px 1px var(--accent); }
+.card.claude { --accent:var(--violet); } .card.gpt { --accent:var(--cyan); } .card.all { --accent:#e2e8f0; }
+.card .name { color:var(--muted); font-size:.92rem; }
+.card .big { font-size:2.7rem; line-height:1.1; font-weight:700; margin:4px 0 2px; }
+.card .cost { font-size:1.15rem; font-weight:600; }
+.card .sub { color:var(--muted); font-size:.86rem; margin-top:4px; }
+
+/* bot cards */
+.bots { display:grid; grid-template-columns:repeat(4, 1fr); gap:var(--s3); margin-top:var(--s3); }
+.bot { background:var(--panel); border:1px solid var(--line); border-radius:var(--r); padding:var(--s3) var(--s4); }
+.bot.off { border-style:dashed; }
+.bot .row1 { display:flex; justify-content:space-between; align-items:baseline; gap:8px; }
+.bot .bname { font-weight:700; font-size:1.05rem; }
+.fam { font-size:.78rem; padding:1px 8px; border-radius:99px; border:1px solid currentColor; }
+.fam.claude { color:var(--violet); } .fam.gpt { color:var(--cyan); } .fam.other { color:var(--muted); }
+.bot .model { color:var(--muted); font-size:.82rem; overflow-wrap:anywhere; min-height:2.6em; }
+.bot .tok { font-size:1.7rem; font-weight:700; line-height:1.2; }
+.bot .bcost { color:var(--muted); font-size:.9rem; }
+.limit { margin-top:var(--s3); padding-top:var(--s3); border-top:1px solid var(--line); }
+.limit .lab { font-size:.8rem; color:var(--muted); }
+.track { height:12px; border-radius:99px; background:#16224a; border:1px solid var(--line); overflow:hidden; margin:6px 0 4px; }
+.fillbar { height:100%; min-width:3px; border-radius:99px; background:var(--ok); box-shadow:0 0 10px var(--ok); transition:width .6s ease; }
+.fillbar.warn { background:var(--warn); box-shadow:0 0 10px var(--warn); } .fillbar.bad { background:var(--bad); box-shadow:0 0 10px var(--bad); }
+.limit .nums { display:flex; justify-content:space-between; gap:6px; font-size:.86rem; }
+.limit .pct { font-weight:700; }
+
+/* chart + toggle */
+.row { display:flex; align-items:center; gap:var(--s3); flex-wrap:wrap; }
+.tog { display:inline-flex; }
+.tog button { border:1px solid var(--line); background:var(--panel); color:var(--ink); padding:7px 16px; min-height:40px; cursor:pointer; font:inherit; }
+.tog button:first-child { border-radius:10px 0 0 10px; } .tog button:last-child { border-radius:0 10px 10px 0; border-left:0; }
+.tog button[aria-pressed=true] { background:var(--cyan); color:#02131a; border-color:var(--cyan); font-weight:700; }
+button:focus-visible, a:focus-visible { outline:2px solid var(--cyan); outline-offset:2px; }
+.chart svg { width:100%; height:240px; display:block; }
+.legend span { display:inline-flex; align-items:center; gap:6px; margin-right:14px; font-size:.86rem; color:var(--muted); }
+.legend i { width:12px; height:12px; border-radius:3px; display:inline-block; }
+
+/* model bars */
+.model { padding:var(--s2) 0; border-bottom:1px solid var(--line); } .model:last-child { border-bottom:0; }
+.model-head { display:flex; gap:var(--s3); align-items:baseline; flex-wrap:wrap; }
+.model-name { font-weight:600; flex:1 1 220px; overflow-wrap:anywhere; }
+.model-name i { font-style:normal; font-size:.74rem; margin-right:8px; padding:1px 7px; border-radius:99px; border:1px solid currentColor; }
+.model-name i.claude { color:var(--violet); } .model-name i.gpt { color:var(--cyan); } .model-name i.other { color:var(--muted); }
+.model-bots { color:var(--muted); font-size:.86rem; }
+.model-total { font-weight:700; font-size:1.2rem; } .model-total small { color:var(--muted); font-weight:400; margin-left:6px; }
+.bar { height:12px; border-radius:99px; background:#16224a; border:1px solid var(--line); overflow:hidden; margin:6px 0; }
+.bar-fill { height:100%; display:flex; border-radius:99px; overflow:hidden; transition:width .7s ease; }
+.bar-fill span { display:block; height:100%; }
+.seg-in { background:var(--cyan); } .seg-out { background:var(--violet); } .seg-cr { background:#3b82f6; } .seg-cw { background:#f472b6; }
+.model-meta { color:var(--muted); font-size:.86rem; }
+
+/* tables */
+.tablewrap { overflow-x:auto; background:var(--panel); border:1px solid var(--line); border-radius:var(--r); }
+table { border-collapse:collapse; width:100%; }
+th, td { padding:8px 12px; border-bottom:1px solid var(--line); text-align:right; white-space:nowrap; }
+th { color:var(--muted); font-weight:600; font-size:.84rem; position:sticky; top:0; background:var(--panel2); }
 th:first-child, td:first-child, th.l, td.l { text-align:left; }
 tr:last-child td { border-bottom:0; }
-tbody tr:hover td { background:var(--track); }
-.row { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
-.tog { display:inline-flex; background:var(--track); border-radius:10px; padding:3px; }
-.tog button { border:0; background:transparent; color:var(--muted); padding:5px 14px; border-radius:8px; cursor:pointer; font:inherit; font-size:.86rem; transition:background .15s,color .15s; }
-.tog button[aria-pressed=true] { background:var(--card); color:var(--ink); box-shadow:0 1px 2px rgba(0,0,0,.08); }
-.chart { padding:14px; }
-.chart svg { width:100%; height:240px; display:block; }
-.chart line { stroke:var(--line); } .chart text { fill:var(--muted); }
-.legend { margin:8px 0 4px; }
-.legend span { display:inline-flex; align-items:center; gap:6px; margin-right:14px; font-size:.84rem; color:var(--muted); }
-.legend i { width:8px; height:8px; border-radius:50%; display:inline-block; }
-.off { color:var(--danger); }
+td.l.wrap { white-space:normal; overflow-wrap:anywhere; min-width:140px; }
+.off { color:var(--bad); }
+details > summary { cursor:pointer; color:var(--muted); margin:var(--s3) 0; }
 
-/* per-model usage bars */
-.models { padding:6px 18px; }
-.model { padding:14px 0; border-bottom:1px solid var(--line); }
-.model:last-child { border-bottom:0; }
-.model-head { display:flex; align-items:baseline; gap:10px; margin-bottom:8px; }
-.model-name { font-weight:600; font-size:.95rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
-.model-name i { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:8px; vertical-align:middle; background:var(--other); }
-.model-name i.claude { background:var(--claude); } .model-name i.gpt { background:var(--gpt); }
-.model-bots { color:var(--muted); font-size:.82rem; white-space:nowrap; }
-.model-total { margin-left:auto; font-weight:600; font-variant-numeric:tabular-nums; white-space:nowrap; }
-.model-total small { color:var(--muted); font-weight:400; margin-left:6px; }
-.bar { height:8px; border-radius:999px; background:var(--track); overflow:hidden; }
-.bar-fill { display:flex; height:100%; border-radius:999px; overflow:hidden; width:0; transition:width .6s cubic-bezier(.2,.8,.2,1); }
-.bar-fill span { height:100%; }
-.seg-in { background:var(--t-in); } .seg-out { background:var(--t-out); } .seg-cr { background:var(--t-cr); } .seg-cw { background:var(--t-cw); }
-.model-meta { margin-top:6px; color:var(--muted); font-size:.8rem; font-variant-numeric:tabular-nums; }
-@media (prefers-reduced-motion: reduce) { .bar-fill, .tog button { transition:none; } }
-@media (max-width:520px) { .model-head { flex-wrap:wrap; } .model-bots { order:3; width:100%; } }
+@media (max-width: 900px) { .bots { grid-template-columns:repeat(2, 1fr); } }
+@media (max-width: 640px) {
+  main { padding:var(--s3); }
+  .kpis { grid-template-columns:1fr; } .bots { grid-template-columns:1fr; }
+  .card .big { font-size:2.3rem; }
+}
+@media (prefers-reduced-motion: reduce) { .fillbar, .bar-fill { transition:none; } }
 </style>
 </head>
 <body>
 <main>
-  <div class="row" style="justify-content:space-between">
+  <header class="top">
     <h1>Token Dashboard · บอท Hermes</h1>
-    <div class="muted" id="updated" data-testid="updated">กำลังโหลด…</div>
-  </div>
+    <div class="live" id="updated" data-testid="updated" role="status">กำลังโหลด…</div>
+  </header>
   <div class="muted">ค่าใช้จ่ายเป็น <b>ประมาณการ ไม่ใช่ยอดเรียกเก็บจริง</b> (เส้นทาง Claude เป็น subscription) · เวลาแสดงเป็น Asia/Bangkok</div>
   <div class="banner" id="banner" data-testid="banner" role="alert" hidden></div>
 
-  <div class="cards" id="cards" data-testid="cards"></div>
+  <section class="kpis" id="cards" data-testid="cards" aria-label="สรุปรวม"></section>
+  <section class="bots" id="bots" data-testid="bots" aria-label="บอทแต่ละตัว"></section>
   <div class="muted" id="profiles" data-testid="profiles" style="margin-top:6px"></div>
 
-  <h2>การใช้ token แยกตามโมเดล</h2>
-  <div class="models" id="models" data-testid="model-bars"></div>
-  <div class="legend" id="model-legend"></div>
-
-  <h2>แยกตามบอทและโมเดล</h2>
-  <div class="tablewrap"><table id="bytable" data-testid="by-bot"></table></div>
-
-  <div class="row">
+  <div class="row" style="margin-top:8px">
     <h2 style="flex:1">กิจกรรมตามเวลา (token ของข้อความ — ประมาณ)</h2>
     <div class="tog" role="group" aria-label="ช่วงเวลา">
       <button type="button" id="b-day" data-testid="toggle-day" aria-pressed="true">รายวัน</button><button type="button" id="b-hour" data-testid="toggle-hour" aria-pressed="false">รายชั่วโมง</button>
     </div>
   </div>
-  <div class="chart"><svg id="chart" data-testid="chart" role="img" aria-label="กราฟแท่งกิจกรรมตามเวลา"></svg><div class="legend" id="legend"></div>
+  <div class="panel chart"><svg id="chart" data-testid="chart" role="img" aria-label="กราฟแท่งกิจกรรมตามเวลา"></svg><div class="legend" id="legend"></div>
     <div class="muted">เป็นตัวแทนกิจกรรม (นับจากข้อความ) ไม่ใช่ยอด token ที่ถูกเรียกเก็บ</div></div>
 
-  <h2>เซสชันที่ใช้ token สูงสุด 20 อันดับ</h2>
-  <div class="tablewrap"><table id="toptable" data-testid="top-sessions"></table></div>
+  <h2>การใช้ token แยกตามโมเดล</h2>
+  <div class="panel">
+    <div id="models" data-testid="model-bars"></div>
+    <div class="legend" id="model-legend" style="margin-top:8px"></div>
+  </div>
+
+  <h2>รายละเอียด</h2>
+  <details open>
+    <summary>ตารางแยกตามบอทและโมเดล</summary>
+    <div class="tablewrap"><table id="bytable" data-testid="by-bot"></table></div>
+  </details>
+  <details open>
+    <summary>เซสชันที่ใช้ token สูงสุด 20 อันดับ</summary>
+    <div class="tablewrap"><table id="toptable" data-testid="top-sessions"></table></div>
+  </details>
 </main>
 <script>
 (function () {
 'use strict';
 var REFRESH_MS = 30000;
-var COLORS = { astra: '#2563eb', luna: '#60a5fa', sol: '#d97706', flash: '#fbbf24' };
+var COLORS = { astra: '#22d3ee', luna: '#67e8f9', sol: '#a78bfa', flash: '#c4b5fd' };
 var bucket = 'day', last = null, timer = null;
 
 function el(tag, text, cls) { var e = document.createElement(tag); if (text != null) e.textContent = text; if (cls) e.className = cls; return e; }
@@ -123,11 +162,43 @@ function tokens(t) { return t.input + t.output + t.cache_read + t.cache_write; }
 function card(cls, title, t) {
   var c = el('div', null, 'card ' + cls);
   c.setAttribute('data-testid', 'card-' + cls);
-  c.appendChild(el('div', title, 'muted'));
+  c.appendChild(el('div', title, 'name'));
   var big = el('div', fmt(tokens(t)), 'big'); big.setAttribute('data-testid', 'card-' + cls + '-tokens'); c.appendChild(big);
-  c.appendChild(el('div', 'token รวม (input+output+cache)', 'muted'));
-  c.appendChild(el('div', 'input ' + fmt(t.input) + ' · output ' + fmt(t.output) + ' · cache ' + fmt(t.cache_read + t.cache_write)));
-  var cost = el('div', 'ประมาณ ' + usd(t.cost) + ' · ' + fmt(t.calls) + ' ครั้ง'); cost.setAttribute('data-testid', 'card-' + cls + '-cost'); c.appendChild(cost);
+  var cost = el('div', 'ประมาณ ' + usd(t.cost), 'cost'); cost.setAttribute('data-testid', 'card-' + cls + '-cost'); c.appendChild(cost);
+  c.appendChild(el('div', 'input ' + fmt(t.input) + ' · output ' + fmt(t.output) + ' · cache ' + fmt(t.cache_read + t.cache_write) + ' · ' + fmt(t.calls) + ' ครั้ง', 'sub'));
+  return c;
+}
+
+function limitBlock(sl, botName) {
+  var box = el('div', null, 'limit');
+  box.appendChild(el('div', 'บริบท session ปัจจุบัน (ประมาณ)', 'lab'));
+  if (!sl) { box.appendChild(el('div', 'ไม่มีข้อมูล session', 'muted')); return box; }
+  var pct = Math.max(0, Number(sl.pct) || 0), cls = pct > 85 ? 'bad' : (pct >= 60 ? 'warn' : '');
+  var track = el('div', null, 'track'), fill = el('div', null, 'fillbar ' + cls);
+  fill.style.width = Math.min(pct, 100) + '%';
+  track.setAttribute('role', 'progressbar'); track.setAttribute('aria-valuemin', '0'); track.setAttribute('aria-valuemax', '100');
+  track.setAttribute('aria-valuenow', String(Math.min(pct, 100))); track.setAttribute('aria-label', 'บริบท session ปัจจุบันของ ' + botName + ' (ประมาณ)');
+  track.setAttribute('data-testid', 'limit-bar-' + botName); fill.setAttribute('data-level', cls || 'ok');
+  track.appendChild(fill); box.appendChild(track);
+  var nums = el('div', null, 'nums');
+  nums.appendChild(el('span', fmt(sl.used_est) + ' / ' + fmt(sl.limit) + ' token'));
+  var p = el('span', pct.toFixed(1) + '%' + (cls === 'bad' ? ' · ใกล้เต็ม' : (cls === 'warn' ? ' · เริ่มเต็ม' : '')), 'pct'); p.setAttribute('data-testid', 'limit-pct-' + botName);
+  nums.appendChild(p); box.appendChild(nums);
+  return box;
+}
+
+function botCard(p, entries) {
+  var c = el('div', null, 'bot' + (p.available ? '' : ' off'));
+  c.setAttribute('data-testid', 'bot-card'); c.setAttribute('data-bot', p.name);
+  var r1 = el('div', null, 'row1'); r1.appendChild(el('span', p.name, 'bname'));
+  r1.appendChild(el('span', p.family === 'claude' ? 'Claude' : (p.family === 'gpt' ? 'GPT' : 'อื่น ๆ'), 'fam ' + p.family)); c.appendChild(r1);
+  if (!p.available) { c.appendChild(el('div', 'ใช้ไม่ได้: ' + (p.error || ''), 'model off')); return c; }
+  var tot = { input: 0, output: 0, cache_read: 0, cache_write: 0, cost: 0 }, sl = null;
+  entries.forEach(function (b) { ['input', 'output', 'cache_read', 'cache_write', 'cost'].forEach(function (k) { tot[k] += b[k] || 0; }); if (b.session_limit) sl = b.session_limit; });
+  c.appendChild(el('div', p.model || '-', 'model'));
+  var tk = el('div', fmt(tokens(tot)), 'tok'); tk.setAttribute('data-testid', 'bot-tokens'); c.appendChild(tk);
+  var bc = el('div', 'ประมาณ ' + usd(tot.cost), 'bcost'); bc.setAttribute('data-testid', 'bot-cost'); c.appendChild(bc);
+  c.appendChild(limitBlock(sl, p.name));
   return c;
 }
 
@@ -140,7 +211,7 @@ function table(t, head, rows, leftCols) {
   if (!rows.length) { var r0 = el('tr'), td0 = el('td', 'ไม่มีข้อมูล'); td0.colSpan = head.length; r0.appendChild(td0); tb.appendChild(r0); }
   rows.forEach(function (r) {
     var row = el('tr');
-    r.forEach(function (v, i) { var td = el('td', v); if (leftCols.indexOf(i) >= 0) td.className = 'l'; row.appendChild(td); });
+    r.forEach(function (v, i) { var td = el('td', v); if (leftCols.indexOf(i) >= 0) td.className = 'l' + (String(v).length > 28 ? ' wrap' : ''); row.appendChild(td); });
     tb.appendChild(row);
   });
   t.appendChild(tb);
@@ -156,8 +227,8 @@ function chart(series) {
   function node(name, attrs) { var e = document.createElementNS(NS, name); Object.keys(attrs).forEach(function (k) { e.setAttribute(k, attrs[k]); }); return e; }
   [0, 0.5, 1].forEach(function (f) {
     var y = padT + ph * (1 - f);
-    svg.appendChild(node('line', { x1: padL, x2: W, y1: y, y2: y, stroke: '#dde1ea' }));
-    var tx = node('text', { x: padL - 4, y: y + 4, 'text-anchor': 'end', 'font-size': 11, fill: '#5d6678' }); tx.textContent = fmt(max * f); svg.appendChild(tx);
+    svg.appendChild(node('line', { x1: padL, x2: W, y1: y, y2: y, stroke: '#1f2f5c' }));
+    var tx = node('text', { x: padL - 4, y: y + 4, 'text-anchor': 'end', 'font-size': 11, fill: '#a3b3da' }); tx.textContent = fmt(max * f); svg.appendChild(tx);
   });
   series.labels.forEach(function (lab, i) {
     var y = padT + ph;
@@ -168,7 +239,7 @@ function chart(series) {
       var title = node('title', {}); title.textContent = lab + ' · ' + b + ': ' + fmt(v); r.appendChild(title); svg.appendChild(r);
     });
     var step = Math.ceil(n / 8);
-    if (i % step === 0) { var tx = node('text', { x: padL + i * bw + bw / 2, y: H - 8, 'text-anchor': 'middle', 'font-size': 11, fill: '#5d6678' }); tx.textContent = series.bucket === 'hour' ? lab.slice(5) : lab.slice(5); svg.appendChild(tx); }
+    if (i % step === 0) { var tx = node('text', { x: padL + i * bw + bw / 2, y: H - 8, 'text-anchor': 'middle', 'font-size': 11, fill: '#a3b3da' }); tx.textContent = series.bucket === 'hour' ? lab.slice(5) : lab.slice(5); svg.appendChild(tx); }
   });
   var lg = document.getElementById('legend'); clear(lg);
   bots.forEach(function (b) { var s = el('span'), i = el('i'); i.style.background = COLORS[b] || '#6b7280'; s.appendChild(i); s.appendChild(document.createTextNode(b)); lg.appendChild(s); });
@@ -223,7 +294,10 @@ function render(d) {
   cards.appendChild(card('claude', 'Claude (sol, flash)', d.totals.claude));
   cards.appendChild(card('gpt', 'GPT (astra, luna)', d.totals.gpt));
   cards.appendChild(card('all', 'รวมทั้งหมด', d.totals.all));
+  var bots = document.getElementById('bots'); clear(bots);
+  d.profiles.forEach(function (p) { bots.appendChild(botCard(p, by.filter(function (b) { return b.bot === p.name; }))); });
   var pr = document.getElementById('profiles'); clear(pr);
+  pr.hidden = d.profiles.every(function (p) { return p.available; }); // only shown when a profile is unavailable
   d.profiles.forEach(function (p) {
     var s = el('span', p.name + (p.available ? '' : ' (ใช้ไม่ได้: ' + (p.error || '') + ')') + '  ', p.available ? '' : 'off');
     s.setAttribute('data-testid', 'profile-' + p.name + (p.available ? '' : '-off')); pr.appendChild(s);
@@ -243,8 +317,8 @@ function load() {
       if (!r.ok) throw new Error('HTTP ' + r.status);
       return r.json();
     })
-    .catch(function () {
-      // Fallback for static hosting (Cloudflare Pages)
+    .catch(function (e1) {
+      // Fallback for static hosting (Cloudflare Pages); if it fails too, report the API error
       return fetch('data_' + bucket + '.json', { cache: 'no-store' })
         .then(function (r) {
           if (!r.ok) return fetch('data.json', { cache: 'no-store' });
@@ -253,7 +327,8 @@ function load() {
         .then(function (r) {
           if (!r.ok) throw new Error('HTTP ' + r.status);
           return r.json();
-        });
+        })
+        .catch(function () { throw e1; });
     })
     .then(function (d) {
     last = d; document.getElementById('banner').hidden = true;

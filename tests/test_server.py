@@ -223,5 +223,51 @@ class TestAC04Buckets(unittest.TestCase):
         self.assertEqual((d["series"]["bucket"], len(d["series"]["labels"])), ("day", 90))
 
 
+class TestSessionLimit(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.base = self.tmp.name
+
+    def _profile(self, name, model, sessions, messages):
+        make_profile(self.base, name, usage=[row("s-new", model, 1, 1, 1, 0, 0, 0, 0.1)], sessions=sessions)
+        con = sqlite3.connect(os.path.join(self.base, name, "state.db"))
+        con.execute("alter table messages add column active integer")
+        con.executemany("insert into messages (session_id, content, timestamp, token_count, active) values (?,?,?,?,?)", messages)
+        con.commit()
+        con.close()
+
+    def test_session_limit_uses_latest_session_active_messages_and_model_window(self):
+        self._profile("sol", "claude-opus-5-5[1m]",
+                      [("s-old", "local", "Bot Chat", "old", 100.0), ("s-new", "local", "Bot Chat", "new", 200.0)],
+                      [("s-old", "x" * 4000, 1, None, 1),               # older session: ignored
+                       ("s-new", "x" * 4000, 2, None, 1),               # 1000
+                       ("s-new", "y" * 2000, 3, None, 1),               # 500
+                       ("s-new", "z" * 80000, 4, None, 0),              # compacted away: ignored
+                       ("s-new", "w" * 400, 5, None, None)])            # active NULL -> counted? (treated as active)
+        for n in ("astra", "flash", "luna"):
+            make_profile(self.base, n)
+        d = server.build_usage(self.base, now=NOW)
+        sl = [b for b in d["by_bot"] if b["bot"] == "sol"][0]["session_limit"]
+        self.assertEqual(sl["session_id_short"], "s-new")
+        self.assertEqual(sl["used_est"], 1000 + 500 + 100)
+        self.assertEqual((sl["limit"], sl["basis"]), (1_000_000, "estimate"))
+        self.assertAlmostEqual(sl["pct"], 0.2)
+
+    def test_context_limit_rules_and_pct_bands(self):
+        self.assertEqual(server.context_limit("claude-sonnet-5-5[1m]"), 1_000_000)
+        self.assertEqual(server.context_limit("openai/gpt-6.1-sol"), 400_000)
+        self.assertEqual(server.context_limit("claude-haiku"), 200_000)
+        self.assertEqual(server.context_limit(None), 200_000)
+        self._profile("luna", "openai/gpt-6.1-sol", [("s-new", "local", "Bot Chat", "n", 1.0)], [("s-new", "x" * 1_400_000, 1, None, 1)])
+        for n in ("astra", "sol", "flash"):
+            make_profile(self.base, n)
+        sl = [b for b in server.build_usage(self.base, now=NOW)["by_bot"] if b["bot"] == "luna"][0]["session_limit"]
+        self.assertEqual((sl["used_est"], sl["limit"], sl["pct"]), (350_000, 400_000, 87.5))
+        # profile without sessions -> session_limit is None, response still fine
+        d = server.build_usage(self.base, now=NOW)
+        self.assertEqual(len(d["profiles"]), 4)
+
+
 if __name__ == "__main__":
     unittest.main()

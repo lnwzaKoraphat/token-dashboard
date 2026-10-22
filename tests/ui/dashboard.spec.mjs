@@ -29,8 +29,8 @@ function payload(tag = 1) {
     profiles: [{ name: 'sol', family: 'claude', model: 'm', available: true }, { name: 'astra', family: 'gpt', model: 'g', available: true },
       { name: 'flash', family: 'claude', model: 'm', available: false, error: 'database is locked' }, { name: 'luna', family: 'gpt', model: 'g', available: true }],
     totals: { claude: z({ input: 1_200_000 * tag, output: 34_500, cache_read: 10, calls: 9, cost: 12.34 }), gpt: z({ input: 2_000, output: 500, calls: 3, cost: 4.5 }), all: z({ input: 1_202_000 * tag, output: 35_000, calls: 12, cost: 16.84 }) },
-    by_bot: [{ bot: 'sol', model: 'claude-opus', family: 'claude', ...z({ input: 1_200_000 * tag, output: 34_500, calls: 9, cost: 12.34 }) },
-      { bot: 'astra', model: 'openai/gpt-6', family: 'gpt', ...z({ input: 2_000, output: 500, calls: 3, cost: 4.5 }) }],
+    by_bot: [{ bot: 'sol', model: 'claude-opus', family: 'claude', session_limit: { session_id_short: 'abcd1234', used_est: 700_000, limit: 1_000_000, pct: 70.0, basis: 'estimate' }, ...z({ input: 1_200_000 * tag, output: 34_500, calls: 9, cost: 12.34 }) },
+      { bot: 'astra', model: 'openai/gpt-6', family: 'gpt', session_limit: { session_id_short: 'ef567890', used_est: 20_000, limit: 400_000, pct: 5.0, basis: 'estimate' }, ...z({ input: 2_000, output: 500, calls: 3, cost: 4.5 }) }],
     series: { bucket: 'day', labels: ['2026-10-20', '2026-10-21', '2026-10-22'], bots: { sol: [100, 200, 300], astra: [50, 0, 25], flash: [0, 0, 0], luna: [10, 10, 10] } },
     top_sessions: [{ bot: 'sol', session_id_short: 'abcd1234', source: 'local', title: '<img src=x onerror="window.__pwn=1">', model: 'claude-opus', total_tokens: 1_234_500, cost: 12.34, last_seen_iso: '2026-10-22T11:59:00+07:00' }],
   };
@@ -113,4 +113,43 @@ test('AC-05: the page makes no requests outside 127.0.0.1', async ({ page }) => 
   await page.goto(`http://127.0.0.1:${PORT}/`);
   await expect(page.getByTestId('card-claude-tokens')).toBeVisible();
   expect(external).toEqual([]);
+});
+
+test('UI2: KPI tiles, 4 bot cards with limit bars (green/amber/red bands), layout order and no overflow', async ({ page }) => {
+  const d = payload();
+  d.by_bot.push({ bot: 'luna', model: 'openai/gpt-6.1', family: 'gpt', session_limit: { session_id_short: 'l1', used_est: 380_000, limit: 400_000, pct: 95.0, basis: 'estimate' }, ...z({ input: 1, calls: 1 }) });
+  await page.route('**/api/usage*', (r) => r.fulfill({ contentType: 'application/json', body: JSON.stringify(d) }));
+  await page.goto(`http://127.0.0.1:${PORT}/`);
+  await expect(page.getByTestId('bot-card')).toHaveCount(4);
+  await expect(page.getByTestId('cards').locator('.card')).toHaveCount(3);
+  // astra 5% green, sol 70% amber, luna 95% red, flash (unavailable) has no bar
+  const lvl = (bot) => page.getByTestId('limit-bar-' + bot).locator('.fillbar').getAttribute('data-level');
+  expect(await lvl('astra')).toBe('ok');
+  expect(await lvl('sol')).toBe('warn');
+  expect(await lvl('luna')).toBe('bad');
+  await expect(page.getByTestId('limit-pct-sol')).toContainText('70.0%');
+  await expect(page.getByTestId('limit-bar-sol')).toHaveAttribute('aria-valuenow', '70');
+  await expect(page.getByTestId('bot-card').first()).toContainText('บริบท session ปัจจุบัน (ประมาณ)');
+  await expect(page.locator('.bot[data-bot=flash]')).toContainText('ใช้ไม่ได้');
+  await expect(page.locator('.bot[data-bot=flash] [data-testid^=limit-bar]')).toHaveCount(0);
+  // fill width follows pct
+  const w = await page.getByTestId('limit-bar-sol').evaluate((t) => t.firstElementChild.getBoundingClientRect().width / t.getBoundingClientRect().width);
+  expect(w).toBeGreaterThan(0.65); expect(w).toBeLessThan(0.75);
+  // first-screen order: KPI tiles above bot cards above the time chart above the details tables
+  const y = async (id) => (await page.getByTestId(id).boundingBox()).y;
+  const ys = [await y('cards'), await y('bots'), await y('chart'), await y('by-bot'), await y('top-sessions')];
+  expect(ys).toEqual([...ys].sort((a, b) => a - b));
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
+  // readable: no text glow, large numerals
+  expect(await page.getByTestId('card-claude-tokens').evaluate((e) => [getComputedStyle(e).textShadow, parseFloat(getComputedStyle(e).fontSize)])).toEqual(['none', expect.any(Number)]);
+  expect(await page.getByTestId('card-claude-tokens').evaluate((e) => parseFloat(getComputedStyle(e).fontSize))).toBeGreaterThanOrEqual(36);
+});
+
+test('UI2: missing session_limit degrades gracefully; page stays rendered', async ({ page }) => {
+  const d = payload();
+  d.by_bot.forEach((b) => { delete b.session_limit; });
+  await page.route('**/api/usage*', (r) => r.fulfill({ contentType: 'application/json', body: JSON.stringify(d) }));
+  await page.goto(`http://127.0.0.1:${PORT}/`);
+  await expect(page.locator('.bot[data-bot=sol]')).toContainText('ไม่มีข้อมูล session');
+  await expect(page.getByTestId('card-claude-tokens')).toHaveText('1.2M');
 });
