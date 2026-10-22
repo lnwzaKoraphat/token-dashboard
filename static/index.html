@@ -238,10 +238,24 @@ function render(d) {
 
 function pad(n) { return (n < 10 ? '0' : '') + n; }
 function load() {
-  return fetch('/api/usage?bucket=' + bucket + '&days=7', { cache: 'no-store' }).then(function (r) {
-    if (!r.ok) throw new Error('HTTP ' + r.status);
-    return r.json();
-  }).then(function (d) {
+  return fetch('/api/usage?bucket=' + bucket + '&days=7', { cache: 'no-store' })
+    .then(function (r) {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    })
+    .catch(function () {
+      // Fallback for static hosting (Cloudflare Pages)
+      return fetch('data_' + bucket + '.json', { cache: 'no-store' })
+        .then(function (r) {
+          if (!r.ok) return fetch('data.json', { cache: 'no-store' });
+          return r;
+        })
+        .then(function (r) {
+          if (!r.ok) throw new Error('HTTP ' + r.status);
+          return r.json();
+        });
+    })
+    .then(function (d) {
     last = d; document.getElementById('banner').hidden = true;
     render(d);
     var t = new Date();

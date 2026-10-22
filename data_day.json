@@ -1,0 +1,360 @@
+{
+  "generated_at": "2026-10-22T15:43:48+07:00",
+  "profiles": [
+    {
+      "name": "astra",
+      "family": "gpt",
+      "model": "openai/gpt-6-astra",
+      "available": true
+    },
+    {
+      "name": "sol",
+      "family": "claude",
+      "model": "claude-opus-5-5[1m]",
+      "available": true
+    },
+    {
+      "name": "flash",
+      "family": "claude",
+      "model": "claude-sonnet-5-5[1m]",
+      "available": true
+    },
+    {
+      "name": "luna",
+      "family": "gpt",
+      "model": "openai/gpt-6.1-sol",
+      "available": true
+    }
+  ],
+  "totals": {
+    "claude": {
+      "input": 45671,
+      "output": 484124,
+      "cache_read": 78619963,
+      "cache_write": 2052871,
+      "reasoning": 109563,
+      "calls": 413,
+      "cost": 29.988180500000013
+    },
+    "gpt": {
+      "input": 1262688,
+      "output": 42464,
+      "cache_read": 16935526,
+      "cache_write": 0,
+      "reasoning": 5659,
+      "calls": 145,
+      "cost": 8.326561599999998
+    },
+    "all": {
+      "input": 1308359,
+      "output": 526588,
+      "cache_read": 95555489,
+      "cache_write": 2052871,
+      "reasoning": 115222,
+      "calls": 558,
+      "cost": 38.31474210000002
+    }
+  },
+  "by_bot": [
+    {
+      "bot": "astra",
+      "model": "openai/gpt-6-astra",
+      "family": "gpt",
+      "input": 227084,
+      "output": 9666,
+      "cache_read": 1644090,
+      "cache_write": 0,
+      "reasoning": 1428,
+      "calls": 46,
+      "cost": 4.398229999999999
+    },
+    {
+      "bot": "sol",
+      "model": "claude-opus-5-5[1m]",
+      "family": "claude",
+      "input": 12991,
+      "output": 168931,
+      "cache_read": 39345422,
+      "cache_write": 833071,
+      "reasoning": 30485,
+      "calls": 236,
+      "cost": 17.964236400000008
+    },
+    {
+      "bot": "flash",
+      "model": "claude-sonnet-5-5[1m]",
+      "family": "claude",
+      "input": 32680,
+      "output": 315193,
+      "cache_read": 39274541,
+      "cache_write": 1219800,
+      "reasoning": 79078,
+      "calls": 177,
+      "cost": 12.023944100000003
+    },
+    {
+      "bot": "luna",
+      "model": "openai/gpt-6.1-sol",
+      "family": "gpt",
+      "input": 1035604,
+      "output": 32798,
+      "cache_read": 15291436,
+      "cache_write": 0,
+      "reasoning": 4231,
+      "calls": 99,
+      "cost": 3.928331600000001
+    }
+  ],
+  "series": {
+    "bucket": "day",
+    "labels": [
+      "2026-10-16",
+      "2026-10-17",
+      "2026-10-18",
+      "2026-10-19",
+      "2026-10-20",
+      "2026-10-21",
+      "2026-10-22"
+    ],
+    "bots": {
+      "astra": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        56447
+      ],
+      "sol": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        121406
+      ],
+      "flash": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        68867
+      ],
+      "luna": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        209956
+      ]
+    }
+  },
+  "top_sessions": [
+    {
+      "bot": "flash",
+      "session_id_short": "local-03",
+      "source": "local",
+      "title": "Bot Chat",
+      "model": "claude-sonnet-5-5[1m]",
+      "total_tokens": 34047908,
+      "cost": 10.839186900000003,
+      "last_seen_iso": "2026-10-22T14:10:26+07:00"
+    },
+    {
+      "bot": "sol",
+      "session_id_short": "local-69",
+      "source": "local",
+      "title": "Bot Chat",
+      "model": "claude-opus-5-5[1m]",
+      "total_tokens": 33967704,
+      "cost": 15.188051600000009,
+      "last_seen_iso": "2026-10-22T14:17:28+07:00"
+    },
+    {
+      "bot": "luna",
+      "session_id_short": "local-aa",
+      "source": "local",
+      "title": "Bot Chat",
+      "model": "openai/gpt-6.1-sol",
+      "total_tokens": 14459471,
+      "cost": 3.6333337000000006,
+      "last_seen_iso": "2026-10-22T14:13:28+07:00"
+    },
+    {
+      "bot": "flash",
+      "session_id_short": "local-03",
+      "source": "local",
+      "title": "Bot Chat",
+      "model": "claude-sonnet-5-5[1m]",
+      "total_tokens": 6667679,
+      "cost": 1.0022722000000002,
+      "last_seen_iso": "2026-10-22T14:10:40+07:00"
+    },
+    {
+      "bot": "sol",
+      "session_id_short": "local-69",
+      "source": "local",
+      "title": "Bot Chat",
+      "model": "claude-opus-5-5[1m]",
+      "total_tokens": 6285049,
+      "cost": 2.487773,
+      "last_seen_iso": "2026-10-22T14:18:44+07:00"
+    },
+    {
+      "bot": "luna",
+      "session_id_short": "local-aa",
+      "source": "local",
+      "title": "Bot Chat",
+      "model": "openai/gpt-6.1-sol",
+      "total_tokens": 1843190,
+      "cost": 0.25343709999999997,
+      "last_seen_iso": "2026-10-22T13:40:59+07:00"
+    },
+    {
+      "bot": "astra",
+      "session_id_short": "local-60",
+      "source": "local",
+      "title": "Bot Chat",
+      "model": "openai/gpt-6-astra",
+      "total_tokens": 1354861,
+      "cost": 3.5364559999999994,
+      "last_seen_iso": "2026-10-22T13:54:27+07:00"
+    },
+    {
+      "bot": "astra",
+      "session_id_short": "local-60",
+      "source": "local",
+      "title": "Bot Chat",
+      "model": "openai/gpt-6-astra",
+      "total_tokens": 495931,
+      "cost": 0.667524,
+      "last_seen_iso": "2026-10-22T13:54:44+07:00"
+    },
+    {
+      "bot": "sol",
+      "session_id_short": "local-30",
+      "source": "bot_room",
+      "title": "Group: 3b4a1ec8-6ded-4f9b-95ba-b2e9cf573f89",
+      "model": "claude-opus-5-5[1m]",
+      "total_tokens": 47562,
+      "cost": 0.20702500000000001,
+      "last_seen_iso": "2026-10-22T09:40:18+07:00"
+    },
+    {
+      "bot": "flash",
+      "session_id_short": "local-41",
+      "source": "bot_room",
+      "title": "Group: 3b4a1ec8-6ded-4f9b-95ba-b2e9cf573f89",
+      "model": "claude-sonnet-5-5[1m]",
+      "total_tokens": 46983,
+      "cost": 0.10235260000000002,
+      "last_seen_iso": "2026-10-22T09:40:15+07:00"
+    },
+    {
+      "bot": "sol",
+      "session_id_short": "local-fa",
+      "source": "bot_room",
+      "title": "Group: 1ea47ba1-8aa4-4ff2-90b8-330a6b08b32f",
+      "model": "claude-opus-5-5[1m]",
+      "total_tokens": 46375,
+      "cost": 0.027334800000000003,
+      "last_seen_iso": "2026-10-22T09:44:57+07:00"
+    },
+    {
+      "bot": "flash",
+      "session_id_short": "local-45",
+      "source": "bot_room",
+      "title": "Group: 1ea47ba1-8aa4-4ff2-90b8-330a6b08b32f",
+      "model": "claude-sonnet-5-5[1m]",
+      "total_tokens": 45998,
+      "cost": 0.0133764,
+      "last_seen_iso": "2026-10-22T09:44:53+07:00"
+    },
+    {
+      "bot": "luna",
+      "session_id_short": "local-54",
+      "source": "bot_room",
+      "title": "Group: 3b4a1ec8-6ded-4f9b-95ba-b2e9cf573f89",
+      "model": "openai/gpt-6.1-sol",
+      "total_tokens": 27662,
+      "cost": 0.0306008,
+      "last_seen_iso": "2026-10-22T09:40:24+07:00"
+    },
+    {
+      "bot": "luna",
+      "session_id_short": "local-0d",
+      "source": "bot_room",
+      "title": "Group: 1ea47ba1-8aa4-4ff2-90b8-330a6b08b32f",
+      "model": "openai/gpt-6.1-sol",
+      "total_tokens": 27294,
+      "cost": 0.004398,
+      "last_seen_iso": "2026-10-22T09:45:00+07:00"
+    },
+    {
+      "bot": "flash",
+      "session_id_short": "local-03",
+      "source": "local",
+      "title": "Bot Chat",
+      "model": "claude-sonnet-5-5[1m]",
+      "total_tokens": 27125,
+      "cost": 0.055146,
+      "last_seen_iso": "2026-10-22T14:07:48+07:00"
+    },
+    {
+      "bot": "astra",
+      "session_id_short": "local-0e",
+      "source": "bot_room",
+      "title": "Group: 3b4a1ec8-6ded-4f9b-95ba-b2e9cf573f89",
+      "model": "openai/gpt-6-astra",
+      "total_tokens": 13912,
+      "cost": 0.1458,
+      "last_seen_iso": "2026-10-22T09:40:12+07:00"
+    },
+    {
+      "bot": "astra",
+      "session_id_short": "local-50",
+      "source": "bot_room",
+      "title": "Group: 1ea47ba1-8aa4-4ff2-90b8-330a6b08b32f",
+      "model": "openai/gpt-6-astra",
+      "total_tokens": 13604,
+      "cost": 0.02037,
+      "last_seen_iso": "2026-10-22T09:44:50+07:00"
+    },
+    {
+      "bot": "sol",
+      "session_id_short": "local-69",
+      "source": "local",
+      "title": "Bot Chat",
+      "model": "claude-opus-5-5[1m]",
+      "total_tokens": 7080,
+      "cost": 0.029712000000000002,
+      "last_seen_iso": "2026-10-22T13:53:45+07:00"
+    },
+    {
+      "bot": "sol",
+      "session_id_short": "local-30",
+      "source": "bot_room",
+      "title": "Group: 3b4a1ec8-6ded-4f9b-95ba-b2e9cf573f89",
+      "model": "claude-opus-5-5[1m]",
+      "total_tokens": 3542,
+      "cost": 0.015352000000000001,
+      "last_seen_iso": "2026-10-22T09:40:19+07:00"
+    },
+    {
+      "bot": "flash",
+      "session_id_short": "local-41",
+      "source": "bot_room",
+      "title": "Group: 3b4a1ec8-6ded-4f9b-95ba-b2e9cf573f89",
+      "model": "claude-sonnet-5-5[1m]",
+      "total_tokens": 3406,
+      "cost": 0.007180000000000001,
+      "last_seen_iso": "2026-10-22T09:40:15+07:00"
+    }
+  ]
+}
