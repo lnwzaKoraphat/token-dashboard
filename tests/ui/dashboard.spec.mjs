@@ -1,0 +1,110 @@
+// AC-05 smoke: the real server serves the page (empty profiles dir); /api/usage is mocked per test.
+import { test, expect } from '@playwright/test';
+import { spawn } from 'node:child_process';
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const PY = process.env.PYTHON || 'C:/Users/DcF/AppData/Local/Microsoft/WindowsApps/python.exe';
+const ROOT = fileURLToPath(new URL('../../', import.meta.url));
+const PORT = 8790 + Math.floor(Math.random() * 50);
+let proc;
+
+test.beforeAll(async () => {
+  proc = spawn(PY, [join(ROOT, 'server.py'), '--port', String(PORT), '--base', mkdtempSync(join(tmpdir(), 'td-'))], { stdio: 'ignore' });
+  for (let i = 0; i < 50; i++) {
+    try { if ((await fetch(`http://127.0.0.1:${PORT}/`)).ok) return; } catch { /* not up yet */ }
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  throw new Error('server did not start');
+});
+test.afterAll(() => proc && proc.kill());
+
+const z = (o = {}) => ({ input: 0, output: 0, cache_read: 0, cache_write: 0, reasoning: 0, calls: 0, cost: 0, ...o });
+function payload(tag = 1) {
+  return {
+    generated_at: '2026-10-22T12:00:00+07:00',
+    profiles: [{ name: 'sol', family: 'claude', model: 'm', available: true }, { name: 'astra', family: 'gpt', model: 'g', available: true },
+      { name: 'flash', family: 'claude', model: 'm', available: false, error: 'database is locked' }, { name: 'luna', family: 'gpt', model: 'g', available: true }],
+    totals: { claude: z({ input: 1_200_000 * tag, output: 34_500, cache_read: 10, calls: 9, cost: 12.34 }), gpt: z({ input: 2_000, output: 500, calls: 3, cost: 4.5 }), all: z({ input: 1_202_000 * tag, output: 35_000, calls: 12, cost: 16.84 }) },
+    by_bot: [{ bot: 'sol', model: 'claude-opus', family: 'claude', ...z({ input: 1_200_000 * tag, output: 34_500, calls: 9, cost: 12.34 }) },
+      { bot: 'astra', model: 'openai/gpt-6', family: 'gpt', ...z({ input: 2_000, output: 500, calls: 3, cost: 4.5 }) }],
+    series: { bucket: 'day', labels: ['2026-10-20', '2026-10-21', '2026-10-22'], bots: { sol: [100, 200, 300], astra: [50, 0, 25], flash: [0, 0, 0], luna: [10, 10, 10] } },
+    top_sessions: [{ bot: 'sol', session_id_short: 'abcd1234', source: 'local', title: '<img src=x onerror="window.__pwn=1">', model: 'claude-opus', total_tokens: 1_234_500, cost: 12.34, last_seen_iso: '2026-10-22T11:59:00+07:00' }],
+  };
+}
+
+test('AC-05: renders cards, per-bot table, chart and top sessions; hostile text stays inert', async ({ page }) => {
+  await page.route('**/api/usage*', (r) => r.fulfill({ contentType: 'application/json', body: JSON.stringify(payload()) }));
+  await page.goto(`http://127.0.0.1:${PORT}/`);
+  await expect(page.getByTestId('card-claude-tokens')).toHaveText('1.2M');
+  await expect(page.getByTestId('card-gpt-tokens')).toHaveText('2.5K');
+  await expect(page.getByTestId('card-claude-cost')).toContainText('$12.34');
+  await expect(page.getByText('ประมาณการ ไม่ใช่ยอดเรียกเก็บจริง')).toBeVisible();
+  await expect(page.getByTestId('by-bot').locator('tbody tr')).toHaveCount(2);
+  await expect(page.getByTestId('chart').locator('rect')).toHaveCount(8); // non-zero bars only
+  await expect(page.getByText('กิจกรรมตามเวลา (token ของข้อความ — ประมาณ)')).toBeVisible();
+  await expect(page.getByTestId('top-sessions').locator('tbody tr')).toHaveCount(1);
+  await expect(page.getByTestId('top-sessions')).toContainText('<img src=x onerror="window.__pwn=1">');
+  expect(await page.evaluate(() => window.__pwn)).toBeUndefined();
+  await expect(page.getByTestId('profile-flash-off')).toContainText('database is locked');
+  await expect(page.getByTestId('updated')).toHaveText(/^อัปเดตล่าสุด \d\d:\d\d:\d\d$/);
+  await expect(page.getByTestId('banner')).toBeHidden();
+});
+
+test('AC-05: auto-refreshes every ~30 s and day/hour toggle re-queries', async ({ page }) => {
+  const calls = [];
+  let n = 0;
+  await page.clock.install();
+  await page.route('**/api/usage*', (r) => { calls.push(new URL(r.request().url()).searchParams.get('bucket')); n++; r.fulfill({ contentType: 'application/json', body: JSON.stringify(payload(n)) }); });
+  await page.goto(`http://127.0.0.1:${PORT}/`);
+  await expect(page.getByTestId('card-claude-tokens')).toHaveText('1.2M');
+  expect(calls).toEqual(['day']);
+  await page.clock.fastForward(29_000);
+  expect(calls.length).toBe(1);
+  await page.clock.fastForward(2_000);
+  await expect(page.getByTestId('card-claude-tokens')).toHaveText('2.4M'); // second response (tag=2)
+  expect(calls.length).toBe(2);
+  await page.getByTestId('toggle-hour').click();
+  await expect.poll(() => calls[calls.length - 1]).toBe('hour');
+  await expect(page.getByTestId('toggle-hour')).toHaveAttribute('aria-pressed', 'true');
+});
+
+test('AC-05: fetch error shows a banner, keeps the last data, and recovers on the next tick', async ({ page }) => {
+  let fail = false;
+  await page.clock.install();
+  await page.route('**/api/usage*', (r) => (fail ? r.abort() : r.fulfill({ contentType: 'application/json', body: JSON.stringify(payload()) })));
+  await page.goto(`http://127.0.0.1:${PORT}/`);
+  await expect(page.getByTestId('card-claude-tokens')).toHaveText('1.2M');
+  fail = true;
+  await page.clock.fastForward(31_000);
+  await expect(page.getByTestId('banner')).toBeVisible();
+  await expect(page.getByTestId('banner')).toContainText('โหลดข้อมูลไม่สำเร็จ');
+  await expect(page.getByTestId('card-claude-tokens')).toHaveText('1.2M'); // not blanked
+  await expect(page.getByTestId('by-bot').locator('tbody tr')).toHaveCount(2);
+  fail = false;
+  await page.clock.fastForward(31_000);
+  await expect(page.getByTestId('banner')).toBeHidden();
+});
+
+test('AC-05: HTTP 500 from the API also shows the banner without blanking', async ({ page }) => {
+  let bad = false;
+  await page.clock.install();
+  await page.route('**/api/usage*', (r) => (bad ? r.fulfill({ status: 500, body: 'x' }) : r.fulfill({ contentType: 'application/json', body: JSON.stringify(payload()) })));
+  await page.goto(`http://127.0.0.1:${PORT}/`);
+  await expect(page.getByTestId('card-all-tokens')).toHaveText('1.2M');
+  bad = true;
+  await page.clock.fastForward(31_000);
+  await expect(page.getByTestId('banner')).toContainText('HTTP 500');
+  await expect(page.getByTestId('card-all-tokens')).toHaveText('1.2M');
+});
+
+test('AC-05: the page makes no requests outside 127.0.0.1', async ({ page }) => {
+  const external = [];
+  page.on('request', (r) => { if (!r.url().startsWith(`http://127.0.0.1:${PORT}`) && !r.url().startsWith('data:')) external.push(r.url()); });
+  await page.route('**/api/usage*', (r) => r.fulfill({ contentType: 'application/json', body: JSON.stringify(payload()) }));
+  await page.goto(`http://127.0.0.1:${PORT}/`);
+  await expect(page.getByTestId('card-claude-tokens')).toBeVisible();
+  expect(external).toEqual([]);
+});

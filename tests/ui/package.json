@@ -1,0 +1,6 @@
+{
+  "name": "token-dashboard-ui-tests",
+  "private": true,
+  "scripts": { "test": "playwright test -c playwright.config.mjs" },
+  "devDependencies": { "@playwright/test": "1.64.1" }
+}
