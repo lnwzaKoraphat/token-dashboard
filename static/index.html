@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Token Dashboard</title>
+<style>
+:root { --bg:#f5f6fa; --card:#fff; --ink:#1c2230; --muted:#5d6678; --line:#dde1ea; --claude:#d97706; --gpt:#2563eb; --other:#6b7280; }
+* { box-sizing: border-box; }
+body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 "Sarabun","Noto Sans Thai","Leelawadee UI",system-ui,sans-serif; }
+main { max-width:1100px; margin:0 auto; padding:14px; }
+h1 { font-size:1.35rem; margin:6px 0; } h2 { font-size:1.05rem; margin:22px 0 8px; }
+.muted { color:var(--muted); font-size:.88rem; }
+.banner { background:#fdecea; border:1px solid #b3261e; color:#7a1a14; border-radius:10px; padding:10px 14px; margin:10px 0; }
+.banner[hidden] { display:none; }
+.cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:10px; }
+.card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:12px 14px; }
+.card .big { font-size:1.7rem; font-weight:700; font-variant-numeric:tabular-nums; }
+.card.claude { border-top:4px solid var(--claude); } .card.gpt { border-top:4px solid var(--gpt); } .card.all { border-top:4px solid var(--ink); }
+.tablewrap { overflow-x:auto; background:var(--card); border:1px solid var(--line); border-radius:12px; }
+table { border-collapse:collapse; width:100%; font-variant-numeric:tabular-nums; }
+th, td { padding:7px 10px; border-bottom:1px solid var(--line); text-align:right; white-space:nowrap; }
+th:first-child, td:first-child, th.l, td.l { text-align:left; }
+tr:last-child td { border-bottom:0; }
+.row { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+.tog button { border:1px solid var(--line); background:#fff; padding:5px 14px; cursor:pointer; font:inherit; }
+.tog button:first-child { border-radius:8px 0 0 8px; } .tog button:last-child { border-radius:0 8px 8px 0; }
+.tog button[aria-pressed=true] { background:var(--ink); color:#fff; }
+.chart { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:8px; }
+.chart svg { width:100%; height:240px; display:block; }
+.legend span { display:inline-flex; align-items:center; gap:5px; margin-right:12px; font-size:.88rem; }
+.legend i { width:12px; height:12px; border-radius:3px; display:inline-block; }
+.off { color:#b3261e; }
+</style>
+</head>
+<body>
+<main>
+  <div class="row" style="justify-content:space-between">
+    <h1>Token Dashboard · บอท Hermes</h1>
+    <div class="muted" id="updated" data-testid="updated">กำลังโหลด…</div>
+  </div>
+  <div class="muted">ค่าใช้จ่ายเป็น <b>ประมาณการ ไม่ใช่ยอดเรียกเก็บจริง</b> (เส้นทาง Claude เป็น subscription) · เวลาแสดงเป็น Asia/Bangkok</div>
+  <div class="banner" id="banner" data-testid="banner" role="alert" hidden></div>
+
+  <div class="cards" id="cards" data-testid="cards"></div>
+  <div class="muted" id="profiles" data-testid="profiles" style="margin-top:6px"></div>
+
+  <h2>แยกตามบอทและโมเดล</h2>
+  <div class="tablewrap"><table id="bytable" data-testid="by-bot"></table></div>
+
+  <div class="row">
+    <h2 style="flex:1">กิจกรรมตามเวลา (token ของข้อความ — ประมาณ)</h2>
+    <div class="tog" role="group" aria-label="ช่วงเวลา">
+      <button type="button" id="b-day" data-testid="toggle-day" aria-pressed="true">รายวัน</button><button type="button" id="b-hour" data-testid="toggle-hour" aria-pressed="false">รายชั่วโมง</button>
+    </div>
+  </div>
+  <div class="chart"><svg id="chart" data-testid="chart" role="img" aria-label="กราฟแท่งกิจกรรมตามเวลา"></svg><div class="legend" id="legend"></div>
+    <div class="muted">เป็นตัวแทนกิจกรรม (นับจากข้อความ) ไม่ใช่ยอด token ที่ถูกเรียกเก็บ</div></div>
+
+  <h2>เซสชันที่ใช้ token สูงสุด 20 อันดับ</h2>
+  <div class="tablewrap"><table id="toptable" data-testid="top-sessions"></table></div>
+</main>
+<script>
+(function () {
+'use strict';
+var REFRESH_MS = 30000;
+var COLORS = { astra: '#2563eb', luna: '#60a5fa', sol: '#d97706', flash: '#fbbf24' };
+var bucket = 'day', last = null, timer = null;
+
+function el(tag, text, cls) { var e = document.createElement(tag); if (text != null) e.textContent = text; if (cls) e.className = cls; return e; }
+function fmt(n) {
+  n = Number(n) || 0;
+  if (n >= 1e9) return (n / 1e9).toFixed(1) + 'B';
+  if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M';
+  if (n >= 1e3) return (n / 1e3).toFixed(1) + 'K';
+  return String(Math.round(n));
+}
+function usd(n) { return '$' + (Number(n) || 0).toFixed(2); }
+function clear(n) { while (n.firstChild) n.removeChild(n.firstChild); }
+function tokens(t) { return t.input + t.output + t.cache_read + t.cache_write; }
+
+function card(cls, title, t) {
+  var c = el('div', null, 'card ' + cls);
+  c.setAttribute('data-testid', 'card-' + cls);
+  c.appendChild(el('div', title, 'muted'));
+  var big = el('div', fmt(tokens(t)), 'big'); big.setAttribute('data-testid', 'card-' + cls + '-tokens'); c.appendChild(big);
+  c.appendChild(el('div', 'token รวม (input+output+cache)', 'muted'));
+  c.appendChild(el('div', 'input ' + fmt(t.input) + ' · output ' + fmt(t.output) + ' · cache ' + fmt(t.cache_read + t.cache_write)));
+  var cost = el('div', 'ประมาณ ' + usd(t.cost) + ' · ' + fmt(t.calls) + ' ครั้ง'); cost.setAttribute('data-testid', 'card-' + cls + '-cost'); c.appendChild(cost);
+  return c;
+}
+
+function table(t, head, rows, leftCols) {
+  clear(t);
+  var thead = el('thead'), tr = el('tr');
+  head.forEach(function (h, i) { var th = el('th', h); if (leftCols.indexOf(i) >= 0) th.className = 'l'; tr.appendChild(th); });
+  thead.appendChild(tr); t.appendChild(thead);
+  var tb = el('tbody');
+  if (!rows.length) { var r0 = el('tr'), td0 = el('td', 'ไม่มีข้อมูล'); td0.colSpan = head.length; r0.appendChild(td0); tb.appendChild(r0); }
+  rows.forEach(function (r) {
+    var row = el('tr');
+    r.forEach(function (v, i) { var td = el('td', v); if (leftCols.indexOf(i) >= 0) td.className = 'l'; row.appendChild(td); });
+    tb.appendChild(row);
+  });
+  t.appendChild(tb);
+}
+
+function chart(series) {
+  var NS = 'http://www.w3.org/2000/svg', svg = document.getElementById('chart');
+  clear(svg);
+  var W = 1000, H = 240, padL = 46, padB = 26, padT = 8, bots = Object.keys(series.bots);
+  svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
+  var n = series.labels.length, totals = series.labels.map(function (_, i) { return bots.reduce(function (s, b) { return s + (series.bots[b][i] || 0); }, 0); });
+  var max = Math.max.apply(null, totals.concat([1])), bw = (W - padL) / Math.max(n, 1), ph = H - padB - padT;
+  function node(name, attrs) { var e = document.createElementNS(NS, name); Object.keys(attrs).forEach(function (k) { e.setAttribute(k, attrs[k]); }); return e; }
+  [0, 0.5, 1].forEach(function (f) {
+    var y = padT + ph * (1 - f);
+    svg.appendChild(node('line', { x1: padL, x2: W, y1: y, y2: y, stroke: '#dde1ea' }));
+    var tx = node('text', { x: padL - 4, y: y + 4, 'text-anchor': 'end', 'font-size': 11, fill: '#5d6678' }); tx.textContent = fmt(max * f); svg.appendChild(tx);
+  });
+  series.labels.forEach(function (lab, i) {
+    var y = padT + ph;
+    bots.forEach(function (b) {
+      var v = series.bots[b][i] || 0; if (!v) return;
+      var h = v / max * ph; y -= h;
+      var r = node('rect', { x: padL + i * bw + 1, y: y, width: Math.max(bw - 2, 1), height: h, fill: COLORS[b] || '#6b7280', 'data-bot': b });
+      var title = node('title', {}); title.textContent = lab + ' · ' + b + ': ' + fmt(v); r.appendChild(title); svg.appendChild(r);
+    });
+    var step = Math.ceil(n / 8);
+    if (i % step === 0) { var tx = node('text', { x: padL + i * bw + bw / 2, y: H - 8, 'text-anchor': 'middle', 'font-size': 11, fill: '#5d6678' }); tx.textContent = series.bucket === 'hour' ? lab.slice(5) : lab.slice(5); svg.appendChild(tx); }
+  });
+  var lg = document.getElementById('legend'); clear(lg);
+  bots.forEach(function (b) { var s = el('span'), i = el('i'); i.style.background = COLORS[b] || '#6b7280'; s.appendChild(i); s.appendChild(document.createTextNode(b)); lg.appendChild(s); });
+}
+
+function render(d) {
+  var by = d.by_bot;
+  var cards = document.getElementById('cards'); clear(cards);
+  cards.appendChild(card('claude', 'Claude (sol, flash)', d.totals.claude));
+  cards.appendChild(card('gpt', 'GPT (astra, luna)', d.totals.gpt));
+  cards.appendChild(card('all', 'รวมทั้งหมด', d.totals.all));
+  var pr = document.getElementById('profiles'); clear(pr);
+  d.profiles.forEach(function (p) {
+    var s = el('span', p.name + (p.available ? '' : ' (ใช้ไม่ได้: ' + (p.error || '') + ')') + '  ', p.available ? '' : 'off');
+    s.setAttribute('data-testid', 'profile-' + p.name + (p.available ? '' : '-off')); pr.appendChild(s);
+  });
+  table(document.getElementById('bytable'), ['บอท', 'โมเดล', 'ตระกูล', 'input', 'output', 'cache read', 'cache write', 'reasoning', 'ครั้ง', 'ค่าประมาณ'],
+    by.map(function (b) { return [b.bot, b.model, b.family, fmt(b.input), fmt(b.output), fmt(b.cache_read), fmt(b.cache_write), fmt(b.reasoning), fmt(b.calls), usd(b.cost)]; }), [0, 1, 2]);
+  chart(d.series);
+  table(document.getElementById('toptable'), ['บอท', 'เซสชัน', 'ที่มา', 'ชื่อ', 'โมเดล', 'token รวม', 'ค่าประมาณ', 'ล่าสุด'],
+    d.top_sessions.map(function (s) { return [s.bot, s.session_id_short, s.source, s.title, s.model, fmt(s.total_tokens), usd(s.cost), s.last_seen_iso.replace('T', ' ').slice(0, 16)]; }), [0, 1, 2, 3, 4, 7]);
+}
+
+function pad(n) { return (n < 10 ? '0' : '') + n; }
+function load() {
+  return fetch('/api/usage?bucket=' + bucket + '&days=7', { cache: 'no-store' }).then(function (r) {
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    return r.json();
+  }).then(function (d) {
+    last = d; document.getElementById('banner').hidden = true;
+    render(d);
+    var t = new Date();
+    document.getElementById('updated').textContent = 'อัปเดตล่าสุด ' + pad(t.getHours()) + ':' + pad(t.getMinutes()) + ':' + pad(t.getSeconds());
+  }).catch(function (e) {
+    var b = document.getElementById('banner');
+    b.textContent = 'โหลดข้อมูลไม่สำเร็จ (' + (e && e.message ? e.message : 'เครือข่าย') + ') — แสดงข้อมูลล่าสุดที่มี จะลองใหม่ใน 30 วินาที';
+    b.hidden = false; // keep last data on screen
+  });
+}
+function schedule() { clearTimeout(timer); timer = setTimeout(function () { load().then(schedule); }, REFRESH_MS); }
+function setBucket(b) {
+  bucket = b;
+  document.getElementById('b-day').setAttribute('aria-pressed', String(b === 'day'));
+  document.getElementById('b-hour').setAttribute('aria-pressed', String(b === 'hour'));
+  load().then(schedule);
+}
+document.getElementById('b-day').addEventListener('click', function () { setBucket('day'); });
+document.getElementById('b-hour').addEventListener('click', function () { setBucket('hour'); });
+load().then(schedule);
+})();
+</script>
+</body>
+</html>
