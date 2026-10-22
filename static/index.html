@@ -5,32 +5,69 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Token Dashboard</title>
 <style>
-:root { --bg:#f5f6fa; --card:#fff; --ink:#1c2230; --muted:#5d6678; --line:#dde1ea; --claude:#d97706; --gpt:#2563eb; --other:#6b7280; }
-* { box-sizing: border-box; }
-body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 "Sarabun","Noto Sans Thai","Leelawadee UI",system-ui,sans-serif; }
-main { max-width:1100px; margin:0 auto; padding:14px; }
-h1 { font-size:1.35rem; margin:6px 0; } h2 { font-size:1.05rem; margin:22px 0 8px; }
-.muted { color:var(--muted); font-size:.88rem; }
-.banner { background:#fdecea; border:1px solid #b3261e; color:#7a1a14; border-radius:10px; padding:10px 14px; margin:10px 0; }
+:root {
+  --bg:#f7f7f5; --card:#fff; --ink:#18181b; --muted:#71717a; --line:#ececea; --track:#f1f1ef;
+  --claude:#d97706; --gpt:#2563eb; --other:#a1a1aa;
+  --t-in:#18181b; --t-out:#4f46e5; --t-cr:#8b9cf9; --t-cw:#c7d2fe;
+  --danger:#b3261e; --danger-bg:#fdf1f0; --radius:14px; --shadow:0 1px 2px rgba(24,24,27,.04);
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg:#0f0f11; --card:#17171a; --ink:#ededed; --muted:#9a9aa3; --line:#26262b; --track:#202024;
+    --t-in:#ededed; --t-out:#818cf8; --t-cr:#4f46e5; --t-cw:#312e81; --danger:#f2b8b5; --danger-bg:#2a1414; --shadow:none; }
+}
+* { box-sizing:border-box; }
+body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.55 "Sarabun","Noto Sans Thai","Leelawadee UI",system-ui,sans-serif; -webkit-font-smoothing:antialiased; }
+main { max-width:1100px; margin:0 auto; padding:28px 16px 48px; }
+h1 { font-size:1.4rem; font-weight:600; letter-spacing:-.01em; margin:0; }
+h2 { font-size:.8rem; font-weight:600; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); margin:36px 0 12px; }
+.muted { color:var(--muted); font-size:.86rem; }
+.banner { background:var(--danger-bg); border:1px solid var(--danger); color:var(--danger); border-radius:var(--radius); padding:10px 14px; margin:12px 0; }
 .banner[hidden] { display:none; }
-.cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:10px; }
-.card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:12px 14px; }
-.card .big { font-size:1.7rem; font-weight:700; font-variant-numeric:tabular-nums; }
-.card.claude { border-top:4px solid var(--claude); } .card.gpt { border-top:4px solid var(--gpt); } .card.all { border-top:4px solid var(--ink); }
-.tablewrap { overflow-x:auto; background:var(--card); border:1px solid var(--line); border-radius:12px; }
-table { border-collapse:collapse; width:100%; font-variant-numeric:tabular-nums; }
-th, td { padding:7px 10px; border-bottom:1px solid var(--line); text-align:right; white-space:nowrap; }
+.cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:12px; margin-top:20px; }
+.card, .tablewrap, .chart, .models { background:var(--card); border:1px solid var(--line); border-radius:var(--radius); box-shadow:var(--shadow); }
+.card { padding:16px 18px; position:relative; }
+.card::before { content:""; position:absolute; left:18px; top:20px; width:8px; height:8px; border-radius:50%; background:var(--ink); }
+.card.claude::before { background:var(--claude); } .card.gpt::before { background:var(--gpt); }
+.card > .muted:first-child { padding-left:16px; }
+.card .big { font-size:2rem; font-weight:600; letter-spacing:-.02em; margin:6px 0 2px; font-variant-numeric:tabular-nums; }
+.card > div:nth-last-child(-n+2) { font-size:.86rem; font-variant-numeric:tabular-nums; }
+.tablewrap { overflow-x:auto; }
+table { border-collapse:collapse; width:100%; font-variant-numeric:tabular-nums; font-size:.9rem; }
+th, td { padding:10px 14px; border-bottom:1px solid var(--line); text-align:right; white-space:nowrap; }
+th { font-weight:500; color:var(--muted); font-size:.8rem; }
 th:first-child, td:first-child, th.l, td.l { text-align:left; }
 tr:last-child td { border-bottom:0; }
+tbody tr:hover td { background:var(--track); }
 .row { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
-.tog button { border:1px solid var(--line); background:#fff; padding:5px 14px; cursor:pointer; font:inherit; }
-.tog button:first-child { border-radius:8px 0 0 8px; } .tog button:last-child { border-radius:0 8px 8px 0; }
-.tog button[aria-pressed=true] { background:var(--ink); color:#fff; }
-.chart { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:8px; }
+.tog { display:inline-flex; background:var(--track); border-radius:10px; padding:3px; }
+.tog button { border:0; background:transparent; color:var(--muted); padding:5px 14px; border-radius:8px; cursor:pointer; font:inherit; font-size:.86rem; transition:background .15s,color .15s; }
+.tog button[aria-pressed=true] { background:var(--card); color:var(--ink); box-shadow:0 1px 2px rgba(0,0,0,.08); }
+.chart { padding:14px; }
 .chart svg { width:100%; height:240px; display:block; }
-.legend span { display:inline-flex; align-items:center; gap:5px; margin-right:12px; font-size:.88rem; }
-.legend i { width:12px; height:12px; border-radius:3px; display:inline-block; }
-.off { color:#b3261e; }
+.chart line { stroke:var(--line); } .chart text { fill:var(--muted); }
+.legend { margin:8px 0 4px; }
+.legend span { display:inline-flex; align-items:center; gap:6px; margin-right:14px; font-size:.84rem; color:var(--muted); }
+.legend i { width:8px; height:8px; border-radius:50%; display:inline-block; }
+.off { color:var(--danger); }
+
+/* per-model usage bars */
+.models { padding:6px 18px; }
+.model { padding:14px 0; border-bottom:1px solid var(--line); }
+.model:last-child { border-bottom:0; }
+.model-head { display:flex; align-items:baseline; gap:10px; margin-bottom:8px; }
+.model-name { font-weight:600; font-size:.95rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
+.model-name i { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:8px; vertical-align:middle; background:var(--other); }
+.model-name i.claude { background:var(--claude); } .model-name i.gpt { background:var(--gpt); }
+.model-bots { color:var(--muted); font-size:.82rem; white-space:nowrap; }
+.model-total { margin-left:auto; font-weight:600; font-variant-numeric:tabular-nums; white-space:nowrap; }
+.model-total small { color:var(--muted); font-weight:400; margin-left:6px; }
+.bar { height:8px; border-radius:999px; background:var(--track); overflow:hidden; }
+.bar-fill { display:flex; height:100%; border-radius:999px; overflow:hidden; width:0; transition:width .6s cubic-bezier(.2,.8,.2,1); }
+.bar-fill span { height:100%; }
+.seg-in { background:var(--t-in); } .seg-out { background:var(--t-out); } .seg-cr { background:var(--t-cr); } .seg-cw { background:var(--t-cw); }
+.model-meta { margin-top:6px; color:var(--muted); font-size:.8rem; font-variant-numeric:tabular-nums; }
+@media (prefers-reduced-motion: reduce) { .bar-fill, .tog button { transition:none; } }
+@media (max-width:520px) { .model-head { flex-wrap:wrap; } .model-bots { order:3; width:100%; } }
 </style>
 </head>
 <body>
@@ -44,6 +81,10 @@ tr:last-child td { border-bottom:0; }
 
   <div class="cards" id="cards" data-testid="cards"></div>
   <div class="muted" id="profiles" data-testid="profiles" style="margin-top:6px"></div>
+
+  <h2>การใช้ token แยกตามโมเดล</h2>
+  <div class="models" id="models" data-testid="model-bars"></div>
+  <div class="legend" id="model-legend"></div>
 
   <h2>แยกตามบอทและโมเดล</h2>
   <div class="tablewrap"><table id="bytable" data-testid="by-bot"></table></div>
@@ -133,6 +174,49 @@ function chart(series) {
   bots.forEach(function (b) { var s = el('span'), i = el('i'); i.style.background = COLORS[b] || '#6b7280'; s.appendChild(i); s.appendChild(document.createTextNode(b)); lg.appendChild(s); });
 }
 
+var prevWidth = {};
+var SEGS = [['input', 'seg-in', 'input'], ['output', 'seg-out', 'output'], ['cache_read', 'seg-cr', 'cache read'], ['cache_write', 'seg-cw', 'cache write']];
+
+function modelBars(by) {
+  var agg = {};
+  by.forEach(function (b) {
+    var m = agg[b.model] || (agg[b.model] = { model: b.model, family: b.family, bots: [], input: 0, output: 0, cache_read: 0, cache_write: 0, calls: 0, cost: 0 });
+    if (m.bots.indexOf(b.bot) < 0) m.bots.push(b.bot);
+    ['input', 'output', 'cache_read', 'cache_write', 'calls', 'cost'].forEach(function (k) { m[k] += b[k] || 0; });
+  });
+  var list = Object.keys(agg).map(function (k) { return agg[k]; }).sort(function (a, b) { return tokens(b) - tokens(a); });
+  var all = list.reduce(function (s, m) { return s + tokens(m); }, 0), max = list.length ? tokens(list[0]) : 0;
+  var box = document.getElementById('models'); clear(box);
+  if (!list.length) box.appendChild(el('div', 'ไม่มีข้อมูล', 'model muted'));
+  var fills = [];
+  list.forEach(function (m) {
+    var t = tokens(m), row = el('div', null, 'model'), head = el('div', null, 'model-head');
+    row.setAttribute('data-testid', 'model-bar');
+    var name = el('div', null, 'model-name'), dot = el('i', null, m.family);
+    name.appendChild(dot); name.appendChild(document.createTextNode(m.model)); name.title = m.model;
+    head.appendChild(name);
+    head.appendChild(el('div', m.bots.join(', '), 'model-bots'));
+    var tot = el('div', fmt(t), 'model-total'); tot.appendChild(el('small', (all ? (t / all * 100).toFixed(1) : '0.0') + '%'));
+    head.appendChild(tot); row.appendChild(head);
+    var bar = el('div', null, 'bar'), fill = el('div', null, 'bar-fill');
+    bar.setAttribute('role', 'img'); bar.setAttribute('aria-label', m.model + ' ' + fmt(t) + ' token');
+    SEGS.forEach(function (s) {
+      if (!m[s[0]] || !t) return;
+      var seg = el('span', null, s[1]); seg.style.width = (m[s[0]] / t * 100) + '%'; seg.title = s[2] + ' ' + fmt(m[s[0]]); fill.appendChild(seg);
+    });
+    fill.style.width = (prevWidth[m.model] || 0) + '%';
+    bar.appendChild(fill); row.appendChild(bar);
+    row.appendChild(el('div', 'input ' + fmt(m.input) + ' · output ' + fmt(m.output) + ' · cache ' + fmt(m.cache_read + m.cache_write) + ' · ' + fmt(m.calls) + ' ครั้ง · ' + usd(m.cost), 'model-meta'));
+    box.appendChild(row);
+    fills.push([fill, prevWidth[m.model] = max ? Math.max(t / max * 100, t ? 1 : 0) : 0]);
+  });
+  // grow from the previous width so 30 s refreshes don't replay from 0
+  void box.offsetWidth;
+  requestAnimationFrame(function () { fills.forEach(function (f) { f[0].style.width = f[1] + '%'; }); });
+  var lg = document.getElementById('model-legend'); clear(lg);
+  SEGS.forEach(function (s) { var sp = el('span'), i = el('i', null, s[1]); sp.appendChild(i); sp.appendChild(document.createTextNode(s[2])); lg.appendChild(sp); });
+}
+
 function render(d) {
   var by = d.by_bot;
   var cards = document.getElementById('cards'); clear(cards);
@@ -144,6 +228,7 @@ function render(d) {
     var s = el('span', p.name + (p.available ? '' : ' (ใช้ไม่ได้: ' + (p.error || '') + ')') + '  ', p.available ? '' : 'off');
     s.setAttribute('data-testid', 'profile-' + p.name + (p.available ? '' : '-off')); pr.appendChild(s);
   });
+  modelBars(by);
   table(document.getElementById('bytable'), ['บอท', 'โมเดล', 'ตระกูล', 'input', 'output', 'cache read', 'cache write', 'reasoning', 'ครั้ง', 'ค่าประมาณ'],
     by.map(function (b) { return [b.bot, b.model, b.family, fmt(b.input), fmt(b.output), fmt(b.cache_read), fmt(b.cache_write), fmt(b.reasoning), fmt(b.calls), usd(b.cost)]; }), [0, 1, 2]);
   chart(d.series);

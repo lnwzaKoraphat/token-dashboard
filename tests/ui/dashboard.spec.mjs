@@ -14,7 +14,8 @@ let proc;
 test.beforeAll(async () => {
   proc = spawn(PY, [join(ROOT, 'server.py'), '--port', String(PORT), '--base', mkdtempSync(join(tmpdir(), 'td-'))], { stdio: 'ignore' });
   for (let i = 0; i < 50; i++) {
-    try { if ((await fetch(`http://127.0.0.1:${PORT}/`)).ok) return; } catch { /* not up yet */ }
+    // drain the body: undici asserts if the server closes the socket on an unread >16 KB response
+    try { const r = await fetch(`http://127.0.0.1:${PORT}/`); await r.text(); if (r.ok) return; } catch { /* not up yet */ }
     await new Promise((r) => setTimeout(r, 100));
   }
   throw new Error('server did not start');
@@ -43,6 +44,11 @@ test('AC-05: renders cards, per-bot table, chart and top sessions; hostile text 
   await expect(page.getByTestId('card-claude-cost')).toContainText('$12.34');
   await expect(page.getByText('ประมาณการ ไม่ใช่ยอดเรียกเก็บจริง')).toBeVisible();
   await expect(page.getByTestId('by-bot').locator('tbody tr')).toHaveCount(2);
+  const bars = page.getByTestId('model-bars').getByTestId('model-bar');
+  await expect(bars).toHaveCount(2);
+  await expect(bars.first()).toContainText('claude-opus'); // sorted by tokens, largest first
+  await expect(bars.first()).toContainText('1.2M');
+  await expect(bars.nth(1)).toContainText('openai/gpt-6');
   await expect(page.getByTestId('chart').locator('rect')).toHaveCount(8); // non-zero bars only
   await expect(page.getByText('กิจกรรมตามเวลา (token ของข้อความ — ประมาณ)')).toBeVisible();
   await expect(page.getByTestId('top-sessions').locator('tbody tr')).toHaveCount(1);
