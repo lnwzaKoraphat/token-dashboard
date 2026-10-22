@@ -120,7 +120,7 @@ class TestAC02ReadOnly(Fixture):
         with urllib.request.urlopen("http://127.0.0.1:%d/api/usage?bucket=hour&days=1" % port) as r:
             self.assertEqual(r.status, 200)
             body = json.load(r)
-        self.assertEqual(set(body), {"generated_at", "profiles", "totals", "by_bot", "series", "top_sessions"})
+        self.assertEqual(set(body), {"generated_at", "profiles", "totals", "by_bot", "window5h", "series", "top_sessions"})
         self.assertEqual(body["series"]["bucket"], "hour")
         # not listening on other interfaces
         for host in {socket.gethostbyname(socket.gethostname())} - {"127.0.0.1"}:
@@ -221,6 +221,140 @@ class TestAC04Buckets(unittest.TestCase):
     def test_ac04_bad_params_fall_back(self):
         d = server.build_usage(self.base, "weeks", 9999, now=bkk(2026, 10, 22, 12, 0))
         self.assertEqual((d["series"]["bucket"], len(d["series"]["labels"])), ("day", 90))
+
+
+class TestSessionLimit(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.base = self.tmp.name
+
+    def _profile(self, name, model, sessions, messages):
+        make_profile(self.base, name, usage=[row("s-new", model, 1, 1, 1, 0, 0, 0, 0.1)], sessions=sessions)
+        con = sqlite3.connect(os.path.join(self.base, name, "state.db"))
+        con.execute("alter table messages add column active integer")
+        con.executemany("insert into messages (session_id, content, timestamp, token_count, active) values (?,?,?,?,?)", messages)
+        con.commit()
+        con.close()
+
+    def test_session_limit_uses_latest_session_active_messages_and_model_window(self):
+        self._profile("sol", "claude-opus-5-5[1m]",
+                      [("s-old", "local", "Bot Chat", "old", 100.0), ("s-new", "local", "Bot Chat", "new", 200.0)],
+                      [("s-old", "x" * 4000, 1, None, 1),               # older session: ignored
+                       ("s-new", "x" * 4000, 2, None, 1),               # 1000
+                       ("s-new", "y" * 2000, 3, None, 1),               # 500
+                       ("s-new", "z" * 80000, 4, None, 0),              # compacted away: ignored
+                       ("s-new", "w" * 400, 5, None, None)])            # active NULL -> counted? (treated as active)
+        for n in ("astra", "flash", "luna"):
+            make_profile(self.base, n)
+        d = server.build_usage(self.base, now=NOW)
+        sl = [b for b in d["by_bot"] if b["bot"] == "sol"][0]["session_limit"]
+        self.assertEqual(sl["session_id_short"], "s-new")
+        self.assertEqual(sl["used_est"], 1000 + 500 + 100)
+        self.assertEqual((sl["limit"], sl["basis"]), (1_000_000, "estimate"))
+        self.assertAlmostEqual(sl["pct"], 0.2)
+
+    def test_context_limit_rules_and_pct_bands(self):
+        self.assertEqual(server.context_limit("claude-sonnet-5-5[1m]"), 1_000_000)
+        self.assertEqual(server.context_limit("openai/gpt-6.1-sol"), 400_000)
+        self.assertEqual(server.context_limit("claude-haiku"), 200_000)
+        self.assertEqual(server.context_limit(None), 200_000)
+        self._profile("luna", "openai/gpt-6.1-sol", [("s-new", "local", "Bot Chat", "n", 1.0)], [("s-new", "x" * 1_400_000, 1, None, 1)])
+        for n in ("astra", "sol", "flash"):
+            make_profile(self.base, n)
+        sl = [b for b in server.build_usage(self.base, now=NOW)["by_bot"] if b["bot"] == "luna"][0]["session_limit"]
+        self.assertEqual((sl["used_est"], sl["limit"], sl["pct"]), (350_000, 400_000, 87.5))
+        # profile without sessions -> session_limit is None, response still fine
+        d = server.build_usage(self.base, now=NOW)
+        self.assertEqual(len(d["profiles"]), 4)
+
+
+class TestWindow5h(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.base = self.tmp.name
+        self.app_now = bkk(2026, 10, 22, 15, 30)
+
+    def _msgs(self, name, items, cost=4.0, sid="s1", model=None):
+        """items: [(timestamp, content_len)] -> profile db with one session."""
+        model = model or ("claude-sonnet-5-5[1m]" if name in ("sol", "flash") else "openai/gpt-6")
+        make_profile(self.base, name, usage=[row(sid, model, 1, 1, 1, 0, 0, 0, cost)],
+                     messages=[(sid, "x" * n, ts, None) for ts, n in items])
+
+    def _fill(self, skip=()):
+        for n in ("astra", "sol", "flash", "luna"):
+            if n not in skip and not os.path.exists(os.path.join(self.base, n)):
+                make_profile(self.base, n)
+
+    def test_window_start_reset_and_boundary_5h(self):
+        # 09:00 starts window 1 (ends 14:00); a message at exactly 14:00 starts window 2 (ends 19:00)
+        self._msgs("sol", [(bkk(2026, 10, 22, 9, 0), 400), (bkk(2026, 10, 22, 9, 30), 400), (bkk(2026, 10, 22, 13, 59, 59), 400),
+                           (bkk(2026, 10, 22, 14, 0, 0), 800), (bkk(2026, 10, 22, 15, 0), 1200)])
+        self._fill()
+        w = server.build_usage(self.base, now=self.app_now)["window5h"]
+        c = w["claude"]
+        self.assertFalse(c["idle"])
+        self.assertEqual(c["start_iso"], "2026-10-22T14:00:00+07:00")
+        self.assertEqual(c["reset_iso"], "2026-10-22T19:00:00+07:00")
+        self.assertEqual(c["minutes_left"], 210)
+        self.assertEqual(c["used_tokens_est"], 800 // 4 + 1200 // 4)
+        self.assertEqual(c["limit"], 2_000_000)
+        self.assertAlmostEqual(c["pct"], round(500 / 2_000_000 * 100, 1))
+        # one second before the boundary we are still in window 1 (resets 14:00)
+        w1 = server.build_usage(self.base, now=bkk(2026, 10, 22, 13, 59, 59))["window5h"]["claude"]
+        self.assertEqual((w1["start_iso"], w1["reset_iso"], w1["used_tokens_est"]), ("2026-10-22T09:00:00+07:00", "2026-10-22T14:00:00+07:00", 300))
+        self.assertEqual(w1["minutes_left"], 1)
+
+    def test_window_idle_when_latest_window_ended(self):
+        self._msgs("sol", [(bkk(2026, 10, 22, 6, 0), 400), (bkk(2026, 10, 22, 10, 59), 400)])
+        self._fill()
+        d = server.build_usage(self.base, now=bkk(2026, 10, 22, 11, 0, 0))  # window 06:00-11:00 ended exactly now
+        c = d["window5h"]["claude"]
+        self.assertTrue(c["idle"])
+        self.assertEqual((c["start_iso"], c["reset_iso"], c["used_tokens_est"], c["pct"]), ("", "", 0, 0.0))
+        self.assertTrue(d["window5h"]["bots"]["sol"]["idle"])
+        self.assertTrue(d["window5h"]["gpt"]["idle"])  # no gpt messages at all
+
+    def test_window_ignores_messages_older_than_24h_and_in_the_future(self):
+        self._msgs("luna", [(self.app_now - 25 * 3600, 4000), (self.app_now - 3600, 400), (self.app_now + 600, 4000)])
+        self._fill()
+        g = server.build_usage(self.base, now=self.app_now)["window5h"]["gpt"]
+        self.assertEqual((g["used_tokens_est"], g["minutes_left"]), (100, 240))
+        self.assertEqual(g["start_iso"], "2026-10-22T14:30:00+07:00")
+
+    def test_window_family_merge_cost_proration_and_limits_file(self):
+        t0 = bkk(2026, 10, 22, 13, 0)
+        # sol: session total 800 chars, only 400 inside the window (other 400 is 30 h old) -> half of $4
+        self._msgs("sol", [(t0, 400), (t0 - 30 * 3600, 400)], cost=4.0, sid="sa")
+        self._msgs("flash", [(t0 + 600, 800)], cost=1.0, sid="sb")
+        self._fill()
+        lim = os.path.join(self.base, "limits.json")
+        with open(lim, "w") as f:
+            json.dump({"claude": {"tokens_5h": 1000}, "gpt": {"tokens_5h": 5}}, f)
+        d = server.build_usage(self.base, now=self.app_now, limits=server.load_limits(lim))["window5h"]
+        c = d["claude"]
+        self.assertEqual(c["used_tokens_est"], 100 + 200)
+        self.assertAlmostEqual(c["cost_est"], 2.0 + 1.0)
+        self.assertEqual((c["limit"], c["pct"]), (1000, 30.0))
+        self.assertEqual(d["bots"]["sol"]["used_tokens_est"], 100)
+        self.assertAlmostEqual(d["bots"]["sol"]["cost_est"], 2.0)
+        self.assertEqual(d["bots"]["flash"]["limit"], 1000)
+        self.assertEqual(d["gpt"]["limit"], 5)
+
+    def test_load_limits_defaults_and_bad_files(self):
+        self.assertEqual(server.load_limits(os.path.join(self.base, "missing.json")), server.LIMITS_DEFAULT)
+        bad = os.path.join(self.base, "bad.json")
+        for text in ("not json", "[]", '{"claude": {"tokens_5h": -5}, "gpt": {"tokens_5h": "x"}}', '{"claude": 7}'):
+            with open(bad, "w") as f:
+                f.write(text)
+            self.assertEqual(server.load_limits(bad), server.LIMITS_DEFAULT, text)
+        with open(bad, "w") as f:
+            f.write('{"gpt": {"tokens_5h": 123456}}')
+        got = server.load_limits(bad)
+        self.assertEqual((got["gpt"]["tokens_5h"], got["claude"]["tokens_5h"]), (123456, 2_000_000))
+        with open(os.path.join(os.path.dirname(server.__file__), "limits.example.json"), encoding="utf-8") as f:
+            self.assertEqual(json.load(f), server.LIMITS_DEFAULT)
 
 
 if __name__ == "__main__":

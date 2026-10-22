@@ -13,6 +13,11 @@ BOTS = ("astra", "sol", "flash", "luna")
 TZ = timezone(timedelta(hours=7))  # Asia/Bangkok, no DST
 TZ_OFFSET = 7 * 3600
 STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
+# Context windows used for the session-limit bar (estimates; first matching rule wins).
+CONTEXT_LIMITS = {"1m_marker": ("[1m]", 1_000_000), "gpt6_prefix": ("openai/gpt-6", 400_000), "default": 200_000}
+WINDOW_SECONDS = 5 * 3600
+LIMITS_DEFAULT = {"claude": {"tokens_5h": 2_000_000}, "gpt": {"tokens_5h": 2_000_000}}
+LIMITS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "limits.json")
 FIELDS = ("input", "output", "cache_read", "cache_write", "reasoning", "calls", "cost")
 
 
@@ -27,6 +32,82 @@ def family_of(model):
     if "gpt" in m or "openai/" in m:
         return "gpt"
     return "other"
+
+
+def context_limit(model):
+    m = (model or "").lower()
+    if CONTEXT_LIMITS["1m_marker"][0] in m:
+        return CONTEXT_LIMITS["1m_marker"][1]
+    if m.startswith(CONTEXT_LIMITS["gpt6_prefix"][0]):
+        return CONTEXT_LIMITS["gpt6_prefix"][1]
+    return CONTEXT_LIMITS["default"]
+
+
+def session_limit(con, fallback_model):
+    """Fill level of the latest session's context (estimate: sum(len(content)//4) of active messages). None if no sessions."""
+    row = con.execute("select id from sessions order by started_at desc limit 1").fetchone()
+    if not row:
+        return None
+    sid = row[0]
+    cols = {r[1] for r in con.execute("pragma table_info(messages)")}
+    where = "session_id = ?"
+    if "active" in cols:
+        where += " and (active = 1 or (active is null and %s))" % ("coalesce(compacted, 0) = 0" if "compacted" in cols else "1")
+    used = con.execute("select coalesce(sum(length(coalesce(content, '')) / 4), 0) from messages where " + where, (sid,)).fetchone()[0] or 0
+    m = con.execute("select model from session_model_usage where session_id = ? order by last_seen desc limit 1", (sid,)).fetchone()
+    limit = context_limit((m[0] if m and m[0] else None) or fallback_model)
+    return {"session_id_short": (sid or "")[:8], "used_est": int(used), "limit": limit, "pct": round(used / limit * 100, 1), "basis": "estimate"}
+
+
+def load_limits(path=None):
+    """Optional limits.json next to server.py; missing/invalid file or values fall back to the defaults."""
+    lim = {k: dict(v) for k, v in LIMITS_DEFAULT.items()}
+    try:
+        with open(path or LIMITS_FILE, encoding="utf-8") as f:
+            data = json.load(f)
+        for fam in lim:
+            v = (data.get(fam) or {}).get("tokens_5h")
+            if isinstance(v, (int, float)) and not isinstance(v, bool) and v > 0:
+                lim[fam]["tokens_5h"] = int(v)
+    except (OSError, ValueError, AttributeError, TypeError):
+        pass
+    return lim
+
+
+def current_window(msgs, now):
+    """msgs: [(ts, chars, key)]. Windows are 5 h long; a window starts at the first message at/after the previous
+    window's end. Returns (start, end, msgs_in_window) for the window containing `now`, or None (idle)."""
+    start = end = None
+    cur = []
+    for m in sorted(x for x in msgs if x[0] <= now):
+        if end is None or m[0] >= end:
+            start, end, cur = m[0], m[0] + WINDOW_SECONDS, []
+        cur.append(m)
+    if end is None or not (start <= now < end):
+        return None
+    return start, end, cur
+
+
+def window_entry(msgs, now, limit, cost_by_key, total_chars):
+    """Estimated 5 h usage for a set of messages. cost is prorated by the share of a session's chars inside the window."""
+    out = {"idle": True, "start_iso": "", "reset_iso": "", "minutes_left": 0, "used_tokens_est": 0, "cost_est": 0.0, "limit": limit, "pct": 0.0}
+    w = current_window(msgs, now)
+    if w is None:
+        return out
+    start, end, cur = w
+    chars = {}
+    used = 0
+    for _, ch, key in cur:
+        used += ch // 4
+        chars[key] = chars.get(key, 0) + ch
+    cost = sum(cost_by_key.get(k, 0.0) * c / total_chars[k] for k, c in chars.items() if total_chars.get(k))
+    out.update({
+        "idle": False, "start_iso": datetime.fromtimestamp(start, TZ).isoformat(timespec="seconds"),
+        "reset_iso": datetime.fromtimestamp(end, TZ).isoformat(timespec="seconds"),
+        "minutes_left": int((end - now + 59) // 60), "used_tokens_est": used, "cost_est": round(cost, 4),
+        "pct": round(used / limit * 100, 1) if limit else 0.0,
+    })
+    return out
 
 
 def zero():
@@ -93,25 +174,34 @@ def read_profile(name, base, bucket, days, now, nbuckets_ctx):
                 " where timestamp >= ? group by b", (TZ_OFFSET, unit, cutoff)):
             if key in index:
                 counts[index[key]] += int(tok or 0)
-        return rows, counts
+        since = now - 24 * 3600
+        wmsgs = [(ts, ch or 0, sid) for sid, ts, ch in con.execute(
+            "select session_id, timestamp, length(coalesce(content, '')) from messages where timestamp >= ? and timestamp <= ?", (since, now))]
+        totals = dict(con.execute(
+            "select session_id, sum(length(coalesce(content, ''))) from messages where session_id in"
+            " (select distinct session_id from messages where timestamp >= ?) group by session_id", (since,)).fetchall())
+        main = max(set(r[1] for r in rows if r[1]), key=lambda k: sum((r[3] or 0) + (r[4] or 0) for r in rows if r[1] == k), default="")
+        return rows, counts, session_limit(con, main), {"msgs": wmsgs, "total_chars": totals}
     finally:
         con.close()
 
 
-def build_usage(base, bucket="day", days=7, now=None):
+def build_usage(base, bucket="day", days=7, now=None, limits=None):
     now = time.time() if now is None else now
     bucket = bucket if bucket in ("day", "hour") else "day"
     days = max(1, min(int(days), 90))
     ctx = bucket_keys(bucket, days, now)
+    limits = limits or load_limits()
+    wsrc = {}  # bot -> (family, msgs, cost_by_key, total_chars_by_key)
     out = {
         "generated_at": datetime.fromtimestamp(now, TZ).isoformat(timespec="seconds"),
         "profiles": [], "totals": {"claude": zero(), "gpt": zero(), "all": zero()},
-        "by_bot": [], "series": {"bucket": bucket, "labels": ctx[0], "bots": {}}, "top_sessions": [],
+        "by_bot": [], "window5h": {}, "series": {"bucket": bucket, "labels": ctx[0], "bots": {}}, "top_sessions": [],
     }
     sessions = []
     for name in BOTS:
         try:
-            rows, counts = read_profile(name, base, bucket, days, now, ctx)
+            rows, counts, slimit, wdata = read_profile(name, base, bucket, days, now, ctx)
         except Exception as e:  # unavailable profile must never crash the response
             out["profiles"].append({"name": name, "family": "other", "model": "", "available": False, "error": str(e)[:200]})
             out["series"]["bots"][name] = [0] * len(ctx[0])
@@ -133,9 +223,25 @@ def build_usage(base, bucket="day", days=7, now=None):
             })
         main = max(per_model, key=lambda k: per_model[k]["input"] + per_model[k]["output"], default="")
         out["profiles"].append({"name": name, "family": family_of(main), "model": main if main != "-" else "", "available": True})
+        cost_by_key = {}
+        for r in rows:
+            cost_by_key[(name, r[0])] = cost_by_key.get((name, r[0]), 0.0) + (r[8] or 0.0)
+        wsrc[name] = (family_of(main), [(ts, ch, (name, sid)) for ts, ch, sid in wdata["msgs"]], cost_by_key,
+                      {(name, sid): n for sid, n in wdata["total_chars"].items()})
         for model, vals in per_model.items():
-            out["by_bot"].append(dict({"bot": name, "model": model, "family": family_of(model)}, **vals))
+            out["by_bot"].append(dict({"bot": name, "model": model, "family": family_of(model), "session_limit": slimit}, **vals))
         out["series"]["bots"][name] = counts
+    w5 = {"bots": {}}
+    for fam in ("claude", "gpt"):
+        members = [w for w in wsrc.values() if w[0] == fam]
+        cost, tot = {}, {}
+        for w in members:
+            cost.update(w[2])
+            tot.update(w[3])
+        w5[fam] = window_entry([m for w in members for m in w[1]], now, limits[fam]["tokens_5h"], cost, tot)
+    for name, (fam, msgs, cost, tot) in wsrc.items():
+        w5["bots"][name] = window_entry(msgs, now, limits.get(fam, {}).get("tokens_5h", LIMITS_DEFAULT["claude"]["tokens_5h"]), cost, tot)
+    out["window5h"] = w5
     sessions.sort(key=lambda s: s["total_tokens"], reverse=True)
     out["top_sessions"] = sessions[:20]
     return out
